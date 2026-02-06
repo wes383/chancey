@@ -343,7 +343,6 @@ function App() {
                 setNumDraws(e.target.value);
                 setError(null);
               }}
-              placeholder="1"
               min="1"
               max="1000"
             />
