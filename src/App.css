@@ -81,6 +81,7 @@ body {
   background: #fff;
   color: #333;
   font-size: 1rem;
+  font-family: 'Inter', sans-serif;
   box-sizing: border-box;
   transition: border-color 0.3s, box-shadow 0.3s;
 }

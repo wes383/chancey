@@ -601,7 +601,6 @@ function App() {
                     type="text"
                     value={separator}
                     onChange={(e) => setSeparator(e.target.value)}
-                    placeholder=", "
                     maxLength="10"
                     style={{ fontFamily: "'Inter', sans-serif" }}
                   />
