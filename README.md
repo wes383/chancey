@@ -23,14 +23,17 @@ Uses [rejection sampling](https://en.wikipedia.org/wiki/Rejection_sampling) to e
      types: [bytes32, string, string, bytes32, uint256, uint256],
      values: [blockHash, userSeed, fixedRule, serverSalt, index, attempt]
    )
-3. If hash < limit: accept and return (hash % range) + min
+3. If hash < limit:
+     a. Calculate candidate = (hash % range) + min
+     b. If "No Duplicates" mode: check if candidate was already used
+     c. If unique (or duplicates allowed): accept and return candidate
 4. Otherwise: increment attempt and retry (step 2)
 ```
 
 **Parameter Types**:
 - `blockHash`: bytes32 - Target block hash
 - `userSeed`: string - User-provided seed
-- `fixedRule`: string - Fixed rule
+- `fixedRule`: string - Fixed rule ("Chancey_v1.0")
 - `serverSalt`: bytes32 - Server salt (revealed after block)
 - `index`: uint256 - Draw index (0, 1, 2, ...)
 - `attempt`: uint256 - Rejection sampling attempt counter (0, 1, 2, ...)

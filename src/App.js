@@ -22,6 +22,7 @@ function App() {
   const [blockMode, setBlockMode] = useState('offset');
   const [manualTargetBlock, setManualTargetBlock] = useState('');
   const [showDetails, setShowDetails] = useState(false);
+  const [allowDuplicates, setAllowDuplicates] = useState(true);
 
   const FIXED_RULE = "Chancey_v1.0";
 
@@ -64,16 +65,6 @@ function App() {
       return false;
     }
 
-    const minBigInt = BigInt(min);
-    const maxBigInt = BigInt(max);
-    const rangeBigInt = maxBigInt - minBigInt + 1n;
-    
-    const MAX_SAFE_RANGE = 2n ** 128n;
-    if (rangeBigInt > MAX_SAFE_RANGE) {
-      setError(`Range is too large. Maximum supported range is approximately 3.4e38`);
-      return false;
-    }
-
     const draws = parseInt(numDraws);
     if (!numDraws || numDraws.trim() === '' || isNaN(draws)) {
       setError("Please enter a valid number of draws");
@@ -87,6 +78,22 @@ function App() {
 
     if (draws > 1000) {
       setError("Number of draws cannot exceed 1000");
+      return false;
+    }
+
+    const minBigInt = BigInt(min);
+    const maxBigInt = BigInt(max);
+    const rangeBigInt = maxBigInt - minBigInt + 1n;
+    
+    const MAX_SAFE_RANGE = 2n ** 128n;
+    if (rangeBigInt > MAX_SAFE_RANGE) {
+      setError(`Range is too large. Maximum supported range is approximately 3.4e38`);
+      return false;
+    }
+
+    // Check if unique draws are possible
+    if (!allowDuplicates && BigInt(draws) > rangeBigInt) {
+      setError(`Cannot draw ${draws} unique numbers from a range of ${rangeBigInt.toString()} values`);
       return false;
     }
 
@@ -123,11 +130,12 @@ function App() {
     }
 
     return true;
-  }, [minValue, maxValue, numDraws, seed, blockMode, blockOffset, manualTargetBlock]);
+  }, [minValue, maxValue, numDraws, seed, blockMode, blockOffset, manualTargetBlock, allowDuplicates]);
 
-  const calculateRandomNumbers = useCallback((blockHash, serverSalt, draws, min, max) => {
+  const calculateRandomNumbers = useCallback((blockHash, serverSalt, draws, min, max, noDuplicates) => {
     const randomValues = [];
     const combinedHashes = [];
+    const usedValues = new Set();
     const minBigInt = BigInt(min);
     const maxBigInt = BigInt(max);
     const range = maxBigInt - minBigInt + 1n;
@@ -140,9 +148,9 @@ function App() {
       let randomValue;
       let finalHash;
       let attempt = 0;
-      const MAX_ATTEMPTS = 100;
+      const MAX_ATTEMPTS = 1000;
       
-      // Rejection sampling: keep trying until we get a value below the limit
+      // Rejection sampling: keep trying until we get a valid value
       while (attempt < MAX_ATTEMPTS) {
         const combinedHash = ethers.solidityPackedKeccak256(
           ["bytes32", "string", "string", "bytes32", "uint256", "uint256"],
@@ -152,16 +160,24 @@ function App() {
         const bigNum = BigInt(combinedHash);
         
         if (bigNum < limit) {
-          randomValue = (bigNum % range) + minBigInt;
-          finalHash = combinedHash;
-          break;
+          const candidateValue = (bigNum % range) + minBigInt;
+          const valueStr = candidateValue.toString();
+          
+          // Check for duplicates if needed
+          if (!noDuplicates || !usedValues.has(valueStr)) {
+            randomValue = candidateValue;
+            finalHash = combinedHash;
+            if (noDuplicates) {
+              usedValues.add(valueStr);
+            }
+            break;
+          }
         }
         
         attempt++;
       }
       
-      // Fallback: if we somehow exceed max attempts (extremely unlikely)
-      // Use the last hash but log a warning
+      // Fallback: if we somehow exceed max attempts
       if (attempt >= MAX_ATTEMPTS) {
         console.warn(`Rejection sampling exceeded ${MAX_ATTEMPTS} attempts for draw ${i}. Using fallback.`);
         const fallbackHash = ethers.solidityPackedKeccak256(
@@ -235,7 +251,8 @@ function App() {
           serverSalt,
           draws,
           minValue,
-          maxValue
+          maxValue,
+          !allowDuplicates
         );
 
         setResult({
@@ -324,6 +341,41 @@ function App() {
               min="1"
               max="1000"
             />
+          </div>
+
+          <div className="input-group">
+            <label style={{ marginBottom: '10px' }}>Duplicate Results:</label>
+            <div style={{ display: 'flex', gap: '20px' }}>
+              <label style={{ display: 'flex', alignItems: 'center', cursor: 'pointer', fontWeight: 'normal', fontSize: '0.9rem' }}>
+                <input 
+                  type="radio" 
+                  checked={allowDuplicates} 
+                  onChange={() => {
+                    setAllowDuplicates(true);
+                    setError(null);
+                  }}
+                  style={{ marginRight: '8px', width: 'auto' }}
+                />
+                Allow Duplicates
+              </label>
+              <label style={{ display: 'flex', alignItems: 'center', cursor: 'pointer', fontWeight: 'normal', fontSize: '0.9rem' }}>
+                <input 
+                  type="radio" 
+                  checked={!allowDuplicates} 
+                  onChange={() => {
+                    setAllowDuplicates(false);
+                    setError(null);
+                  }}
+                  style={{ marginRight: '8px', width: 'auto' }}
+                />
+                No Duplicates
+              </label>
+            </div>
+            <small style={{ color: '#666', fontSize: '0.8rem', display: 'block', marginTop: '12px', userSelect: 'none' }}>
+              {allowDuplicates 
+                ? 'Same number can appear multiple times' 
+                : 'Each number can only appear once'}
+            </small>
           </div>
 
           <div className="advanced-options">
@@ -509,7 +561,8 @@ function App() {
                     Uses rejection sampling to eliminate modulo bias. For each draw, generates 
                     solidityPackedKeccak256 with types [bytes32, string, string, bytes32, uint256, uint256] 
                     and values [Block Hash, User Seed, Fixed Rule, Server Salt, Index, Attempt]. 
-                    Accepts only if the result is below the unbiased limit (2^256 - (2^256 % range)).</p>
+                    Accepts only if the result is below the unbiased limit (2^256 - (2^256 % range)).
+                    {!allowDuplicates && ' Additionally ensures no duplicate values by rejecting already-used numbers.'}</p>
                     <p style={{ fontSize: '0.9em', color: '#666', marginTop: '10px' }}>
                     <strong>Parameters:</strong> Index = draw number (0, 1, 2, ...), Attempt = rejection sampling counter starting from 0 for each draw.
                     </p>
