@@ -27,8 +27,14 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: '18'
-          cache: 'npm'
-          cache-dependency-path: chancey/package-lock.json
+      
+      - name: Cache dependencies
+        uses: actions/cache@v4
+        with:
+          path: chancey/node_modules
+          key: ${{ runner.os }}-node-${{ hashFiles('chancey/package-lock.json') }}
+          restore-keys: |
+            ${{ runner.os }}-node-
       
       - name: Install dependencies
         run: |
