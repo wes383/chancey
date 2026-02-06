@@ -1,70 +1,69 @@
-# Getting Started with Create React App
+# 🎲 Chancey
 
-This project was bootstrapped with [Create React App](https://github.com/facebook/create-react-app).
+A verifiable random number generator powered by Ethereum blockchain
 
-## Available Scripts
+## Overview
 
-In the project directory, you can run:
+Chancey is a web application that generates verifiable random numbers using Ethereum block hashes. By combining user seeds, server salt, and blockchain data, it ensures fairness and verifiability of random number generation.
 
-### `npm start`
+## How It Works
 
-Runs the app in the development mode.\
-Open [http://localhost:3000](http://localhost:3000) to view it in your browser.
+1. **Commit Phase** - User inputs seed and range, system generates hash commitment of server salt
+2. **Wait for Block** - Wait for specified future block to be mined
+3. **Reveal Phase** - Calculate random number using block hash, user seed, and server salt
+4. **Verification** - Users can independently verify the result
 
-The page will reload when you make changes.\
-You may also see any lint errors in the console.
+### Random Number Generation Algorithm
 
-### `npm test`
+Uses [rejection sampling](https://en.wikipedia.org/wiki/Rejection_sampling) to eliminate modulo bias:
 
-Launches the test runner in the interactive watch mode.\
-See the section about [running tests](https://facebook.github.io/create-react-app/docs/running-tests) for more information.
+```
+1. Calculate limit = 2^256 - (2^256 % range)
+2. Generate hash = solidityPackedKeccak256(
+     types: [bytes32, string, string, bytes32, uint256, uint256],
+     values: [blockHash, userSeed, fixedRule, serverSalt, index, attempt]
+   )
+3. If hash < limit: accept and return (hash % range) + min
+4. Otherwise: increment attempt and retry (step 2)
+```
 
-### `npm run build`
+**Parameter Types**:
+- `blockHash`: bytes32 - Target block hash
+- `userSeed`: string - User-provided seed
+- `fixedRule`: string - Fixed rule
+- `serverSalt`: bytes32 - Server salt (revealed after block)
+- `index`: uint256 - Draw index (0, 1, 2, ...)
+- `attempt`: uint256 - Rejection sampling attempt counter (0, 1, 2, ...)
 
-Builds the app for production to the `build` folder.\
-It correctly bundles React in production mode and optimizes the build for the best performance.
+## Quick Start
 
-The build is minified and the filenames include the hashes.\
-Your app is ready to be deployed!
+### Prerequisites
 
-See the section about [deployment](https://facebook.github.io/create-react-app/docs/deployment) for more information.
+- Node.js 14+
+- npm or yarn
 
-### `npm run eject`
+### Installation
 
-**Note: this is a one-way operation. Once you `eject`, you can't go back!**
+```bash
+cd chancey
+npm install
+```
 
-If you aren't satisfied with the build tool and configuration choices, you can `eject` at any time. This command will remove the single build dependency from your project.
+### Development
 
-Instead, it will copy all the configuration files and the transitive dependencies (webpack, Babel, ESLint, etc) right into your project so you have full control over them. All of the commands except `eject` will still work, but they will point to the copied scripts so you can tweak them. At this point you're on your own.
+```bash
+npm start
+```
 
-You don't have to ever use `eject`. The curated feature set is suitable for small and middle deployments, and you shouldn't feel obligated to use this feature. However we understand that this tool wouldn't be useful if you couldn't customize it when you are ready for it.
+### Production Build
 
-## Learn More
+```bash
+npm run build
+```
 
-You can learn more in the [Create React App documentation](https://facebook.github.io/create-react-app/docs/getting-started).
+### Limitations
 
-To learn React, check out the [React documentation](https://reactjs.org/).
+- Miners could theoretically choose not to mine a specific block
+- For high-value scenarios, consider more professional solutions like Chainlink VRF
 
-### Code Splitting
-
-This section has moved here: [https://facebook.github.io/create-react-app/docs/code-splitting](https://facebook.github.io/create-react-app/docs/code-splitting)
-
-### Analyzing the Bundle Size
-
-This section has moved here: [https://facebook.github.io/create-react-app/docs/analyzing-the-bundle-size](https://facebook.github.io/create-react-app/docs/analyzing-the-bundle-size)
-
-### Making a Progressive Web App
-
-This section has moved here: [https://facebook.github.io/create-react-app/docs/making-a-progressive-web-app](https://facebook.github.io/create-react-app/docs/making-a-progressive-web-app)
-
-### Advanced Configuration
-
-This section has moved here: [https://facebook.github.io/create-react-app/docs/advanced-configuration](https://facebook.github.io/create-react-app/docs/advanced-configuration)
-
-### Deployment
-
-This section has moved here: [https://facebook.github.io/create-react-app/docs/deployment](https://facebook.github.io/create-react-app/docs/deployment)
-
-### `npm run build` fails to minify
-
-This section has moved here: [https://facebook.github.io/create-react-app/docs/troubleshooting#npm-run-build-fails-to-minify](https://facebook.github.io/create-react-app/docs/troubleshooting#npm-run-build-fails-to-minify)
+**Note**: This project is for educational and research purposes only. Not recommended for high-value scenarios.
