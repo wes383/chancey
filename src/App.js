@@ -1,6 +1,7 @@
 import { useState, useMemo, useCallback } from 'react';
 import { ethers } from 'ethers';
 import { useBlockchain } from './hooks/useBlockchain';
+import { Copy, Check } from 'lucide-react';
 import './App.css';
 
 function App() {
@@ -23,6 +24,11 @@ function App() {
   const [manualTargetBlock, setManualTargetBlock] = useState('');
   const [showDetails, setShowDetails] = useState(false);
   const [allowDuplicates, setAllowDuplicates] = useState(true);
+  const [hoverNoDup, setHoverNoDup] = useState(false);
+  const [hoverAllowDup, setHoverAllowDup] = useState(false);
+  const [separator, setSeparator] = useState(', ');
+  const [copied, setCopied] = useState(false);
+  const [sortResults, setSortResults] = useState(false);
 
   const FIXED_RULE = "Chancey_v1.0";
 
@@ -277,7 +283,7 @@ function App() {
       setError("Failed to start: " + err.message);
       setStatus('idle');
     }
-  }, [validateInputs, blockMode, blockOffset, manualTargetBlock, getProvider, waitForBlock, calculateRandomNumbers, numDraws, minValue, maxValue]);
+  }, [validateInputs, blockMode, blockOffset, manualTargetBlock, getProvider, waitForBlock, calculateRandomNumbers, numDraws, minValue, maxValue, allowDuplicates]);
 
   const handleReset = useCallback(() => {
     setStatus('idle');
@@ -345,31 +351,92 @@ function App() {
 
           <div className="input-group">
             <label style={{ marginBottom: '10px' }}>Duplicate Results:</label>
-            <div style={{ display: 'flex', gap: '20px' }}>
-              <label style={{ display: 'flex', alignItems: 'center', cursor: 'pointer', fontWeight: 'normal', fontSize: '0.9rem' }}>
-                <input 
-                  type="radio" 
-                  checked={allowDuplicates} 
-                  onChange={() => {
-                    setAllowDuplicates(true);
-                    setError(null);
-                  }}
-                  style={{ marginRight: '8px', width: 'auto' }}
-                />
-                Allow Duplicates
-              </label>
-              <label style={{ display: 'flex', alignItems: 'center', cursor: 'pointer', fontWeight: 'normal', fontSize: '0.9rem' }}>
-                <input 
-                  type="radio" 
-                  checked={!allowDuplicates} 
-                  onChange={() => {
-                    setAllowDuplicates(false);
-                    setError(null);
-                  }}
-                  style={{ marginRight: '8px', width: 'auto' }}
-                />
+            <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+              <span 
+                onClick={() => {
+                  setAllowDuplicates(false);
+                  setError(null);
+                }}
+                onMouseEnter={() => setHoverNoDup(true)}
+                onMouseLeave={() => setHoverNoDup(false)}
+                style={{ 
+                  fontSize: '0.9rem', 
+                  color: !allowDuplicates ? '#333' : (hoverNoDup ? '#333' : '#bbb'), 
+                  lineHeight: '1', 
+                  margin: 0, 
+                  padding: 0, 
+                  transform: 'translateY(1px)',
+                  cursor: 'pointer',
+                  userSelect: 'none',
+                  transition: 'color 0.2s'
+                }}
+              >
                 No Duplicates
+              </span>
+              <label style={{ 
+                position: 'relative', 
+                display: 'block',
+                width: '50px', 
+                height: '24px',
+                cursor: 'pointer',
+                flexShrink: 0,
+                margin: 0,
+                padding: 0
+              }}>
+                <input 
+                  type="checkbox" 
+                  checked={allowDuplicates} 
+                  onChange={(e) => {
+                    setAllowDuplicates(e.target.checked);
+                    setError(null);
+                  }}
+                  style={{ opacity: 0, width: 0, height: 0, position: 'absolute' }}
+                />
+                <span style={{
+                  position: 'absolute',
+                  top: 0,
+                  left: 0,
+                  right: 0,
+                  bottom: 0,
+                  backgroundColor: allowDuplicates ? '#4CAF50' : '#ccc',
+                  borderRadius: '24px',
+                  transition: '0.3s',
+                  cursor: 'pointer'
+                }}>
+                  <span style={{
+                    position: 'absolute',
+                    content: '""',
+                    height: '18px',
+                    width: '18px',
+                    left: allowDuplicates ? '29px' : '3px',
+                    bottom: '3px',
+                    backgroundColor: 'white',
+                    borderRadius: '50%',
+                    transition: '0.3s'
+                  }}></span>
+                </span>
               </label>
+              <span 
+                onClick={() => {
+                  setAllowDuplicates(true);
+                  setError(null);
+                }}
+                onMouseEnter={() => setHoverAllowDup(true)}
+                onMouseLeave={() => setHoverAllowDup(false)}
+                style={{ 
+                  fontSize: '0.9rem', 
+                  color: allowDuplicates ? '#333' : (hoverAllowDup ? '#333' : '#bbb'), 
+                  lineHeight: '1', 
+                  margin: 0, 
+                  padding: 0, 
+                  transform: 'translateY(1px)',
+                  cursor: 'pointer',
+                  userSelect: 'none',
+                  transition: 'color 0.2s'
+                }}
+              >
+                Allow Duplicates
+              </span>
             </div>
             <small style={{ color: '#666', fontSize: '0.8rem', display: 'block', marginTop: '12px', userSelect: 'none' }}>
               {allowDuplicates 
@@ -406,17 +473,21 @@ function App() {
                       style={{
                         padding: '0 20px',
                         borderRadius: '50px',
-                        border: '1px solid rgba(0,0,0,0.1)',
+                        border: '1px solid transparent',
                         background: '#fff',
                         cursor: 'pointer',
                         color: '#333',
                         fontSize: '0.9rem',
                         transition: 'all 0.2s',
-                        fontFamily: "'Inter', sans-serif"
+                        fontFamily: "'Inter', sans-serif",
+                        outline: 'none'
                       }}
-                      title="Generate Random Seed"
-                      onMouseOver={(e) => e.target.style.borderColor = '#333'}
-                      onMouseOut={(e) => e.target.style.borderColor = 'rgba(0,0,0,0.1)'}
+                      onMouseOver={(e) => {
+                        e.target.style.borderColor = 'rgba(76, 175, 80, 0.5)';
+                      }}
+                      onMouseOut={(e) => {
+                        e.target.style.borderColor = 'transparent';
+                      }}
                     >
                       Random
                     </button>
@@ -425,25 +496,67 @@ function App() {
                 
                 <div className="input-group">
                   <label style={{ marginBottom: '10px' }}>Block Selection:</label>
-                  <div style={{ display: 'flex', gap: '20px', marginBottom: '15px' }}>
-                    <label style={{ display: 'flex', alignItems: 'center', cursor: 'pointer', fontWeight: 'normal', fontSize: '0.9rem' }}>
-                      <input 
-                        type="radio" 
-                        checked={blockMode === 'offset'} 
-                        onChange={() => setBlockMode('offset')}
-                        style={{ marginRight: '8px', width: 'auto' }}
-                      />
+                  <div style={{ 
+                    position: 'relative',
+                    display: 'inline-flex', 
+                    backgroundColor: '#ffffff',
+                    borderRadius: '24px',
+                    padding: '4px',
+                    gap: '4px',
+                    marginBottom: '15px'
+                  }}>
+                    <div style={{
+                      position: 'absolute',
+                      top: '4px',
+                      left: blockMode === 'offset' ? '4px' : 'calc(50% + 2px)',
+                      width: 'calc(50% - 6px)',
+                      height: 'calc(100% - 8px)',
+                      backgroundColor: '#4CAF50',
+                      borderRadius: '20px',
+                      transition: 'left 0.3s ease',
+                      pointerEvents: 'none',
+                      zIndex: 0
+                    }}></div>
+                    <button
+                      onClick={() => setBlockMode('offset')}
+                      style={{
+                        position: 'relative',
+                        zIndex: 1,
+                        padding: '8px 20px',
+                        borderRadius: '20px',
+                        border: 'none',
+                        backgroundColor: 'transparent',
+                        color: blockMode === 'offset' ? '#fff' : '#666',
+                        fontSize: '0.9rem',
+                        cursor: 'pointer',
+                        transition: 'color 0.3s',
+                        fontFamily: "'Inter', sans-serif",
+                        fontWeight: '400',
+                        outline: 'none'
+                      }}
+                    >
                       Relative Offset
-                    </label>
-                    <label style={{ display: 'flex', alignItems: 'center', cursor: 'pointer', fontWeight: 'normal', fontSize: '0.9rem' }}>
-                      <input 
-                        type="radio" 
-                        checked={blockMode === 'specific'} 
-                        onChange={() => setBlockMode('specific')}
-                        style={{ marginRight: '8px', width: 'auto' }}
-                      />
+                    </button>
+                    <button
+                      onClick={() => setBlockMode('specific')}
+                      style={{
+                        position: 'relative',
+                        zIndex: 1,
+                        padding: '8px 20px',
+                        borderRadius: '20px',
+                        border: 'none',
+                        backgroundColor: 'transparent',
+                        color: blockMode === 'specific' ? '#fff' : '#666',
+                        fontSize: '0.9rem',
+                        cursor: 'pointer',
+                        transition: 'color 0.3s',
+                        fontFamily: "'Inter', sans-serif",
+                        fontWeight: '400',
+                        outline: 'none'
+                      }}
+                    >
                       Specific Block
-                    </label>
+                    </button>
                   </div>
 
                   {blockMode === 'offset' ? (
@@ -481,6 +594,21 @@ function App() {
                     </>
                   )}
                 </div>
+                
+                <div className="input-group">
+                  <label>Result Separator:</label>
+                  <input
+                    type="text"
+                    value={separator}
+                    onChange={(e) => setSeparator(e.target.value)}
+                    placeholder=", "
+                    maxLength="10"
+                    style={{ fontFamily: "'Inter', sans-serif" }}
+                  />
+                  <small style={{ color: '#666', fontSize: '0.8rem', display: 'block', marginTop: '12px', userSelect: 'none' }}>
+                    Character(s) to separate multiple results
+                  </small>
+                </div>
               </div>
             )}
           </div>
@@ -488,17 +616,121 @@ function App() {
         )}
         
         {result && (
-          <div className="final-result-display" style={{ margin: '30px 0', maxWidth: '800px', wordWrap: 'break-word' }}>
-            <h1 style={{ 
-              fontSize: result.randomValues.length > 1 ? '3rem' : '4rem', 
-              margin: 0, 
-              color: '#333', 
-              lineHeight: 1.2,
-              textWrap: 'balance' 
+          <>
+            <div style={{ 
+              display: 'flex', 
+              alignItems: 'center', 
+              gap: '25px', 
+              marginTop: '30px',
+              marginBottom: '10px'
             }}>
-              {result.randomValues.join(', ')}
-            </h1>
-          </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <span style={{ fontSize: '0.9rem', color: !sortResults ? '#333' : '#bbb', lineHeight: '1', transition: 'color 0.2s' }}>
+                  Original
+                </span>
+                <label style={{ 
+                  position: 'relative', 
+                  display: 'block',
+                  width: '50px', 
+                  height: '24px',
+                  cursor: 'pointer',
+                  flexShrink: 0,
+                  margin: 0,
+                  padding: 0
+                }}>
+                  <input 
+                    type="checkbox" 
+                    checked={sortResults} 
+                    onChange={(e) => setSortResults(e.target.checked)}
+                    style={{ opacity: 0, width: 0, height: 0, position: 'absolute' }}
+                  />
+                  <span style={{
+                    position: 'absolute',
+                    top: 0,
+                    left: 0,
+                    right: 0,
+                    bottom: 0,
+                    backgroundColor: sortResults ? '#4CAF50' : '#ccc',
+                    borderRadius: '24px',
+                    transition: '0.3s',
+                    cursor: 'pointer'
+                  }}>
+                    <span style={{
+                      position: 'absolute',
+                      content: '""',
+                      height: '18px',
+                      width: '18px',
+                      left: sortResults ? '29px' : '3px',
+                      bottom: '3px',
+                      backgroundColor: 'white',
+                      borderRadius: '50%',
+                      transition: '0.3s'
+                    }}></span>
+                  </span>
+                </label>
+                <span style={{ fontSize: '0.9rem', color: sortResults ? '#333' : '#bbb', lineHeight: '1', transition: 'color 0.2s' }}>
+                  Sorted
+                </span>
+              </div>
+              <button
+                onClick={() => {
+                  const displayValues = sortResults 
+                    ? [...result.randomValues].sort((a, b) => Number(a) - Number(b))
+                    : result.randomValues;
+                  const textToCopy = displayValues.join(separator.replace(/\\n/g, '\n'));
+                  navigator.clipboard.writeText(textToCopy);
+                  setCopied(true);
+                  setTimeout(() => setCopied(false), 2000);
+                }}
+                style={{
+                  background: 'rgba(255, 255, 255, 0.6)',
+                  border: '1px solid rgba(255, 255, 255, 0.4)',
+                  borderRadius: '50px',
+                  cursor: 'pointer',
+                  padding: '8px 16px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  color: copied ? '#4CAF50' : '#666',
+                  transition: 'all 0.2s',
+                  fontSize: '0.9rem',
+                  fontFamily: "'Inter', sans-serif",
+                  backdropFilter: 'blur(10px)',
+                  boxShadow: '0 2px 10px rgba(0,0,0,0.05)'
+                }}
+                onMouseOver={(e) => {
+                  if (!copied) {
+                    e.currentTarget.style.background = 'rgba(255, 255, 255, 0.8)';
+                    e.currentTarget.style.boxShadow = '0 5px 15px rgba(0, 0, 0, 0.1)';
+                  }
+                }}
+                onMouseOut={(e) => {
+                  e.currentTarget.style.background = 'rgba(255, 255, 255, 0.6)';
+                  e.currentTarget.style.boxShadow = '0 2px 10px rgba(0,0,0,0.05)';
+                }}
+              >
+                {copied ? <Check size={18} /> : <Copy size={18} />}
+                {copied ? 'Copied!' : 'Copy'}
+              </button>
+            </div>
+            <div className="final-result-display" style={{ maxWidth: '800px', wordWrap: 'break-word' }}>
+              <h1 style={{ 
+                fontSize: result.randomValues.length > 1 ? '3rem' : '4rem', 
+                margin: 0, 
+                color: '#333', 
+                lineHeight: 1.5,
+                textWrap: 'balance',
+                whiteSpace: 'pre-wrap'
+              }}>
+                {(() => {
+                  const displayValues = sortResults 
+                    ? [...result.randomValues].sort((a, b) => Number(a) - Number(b))
+                    : result.randomValues;
+                  return displayValues.join(separator.replace(/\\n/g, '\n'));
+                })()}
+              </h1>
+            </div>
+          </>
         )}
 
         <div className="button-container">
