@@ -64,6 +64,6 @@ npm run build
 ### Limitations
 
 - Miners could theoretically choose not to mine a specific block
-- For high-value scenarios, consider more professional solutions like Chainlink VRF
+- For high-value scenarios, consider more professional solutions
 
 **Note**: This project is for educational and research purposes only. Not recommended for high-value scenarios.
