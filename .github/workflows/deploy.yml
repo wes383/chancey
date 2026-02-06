@@ -31,27 +31,23 @@ jobs:
       - name: Cache dependencies
         uses: actions/cache@v4
         with:
-          path: chancey/node_modules
-          key: ${{ runner.os }}-node-${{ hashFiles('chancey/package-lock.json') }}
+          path: node_modules
+          key: ${{ runner.os }}-node-${{ hashFiles('package-lock.json') }}
           restore-keys: |
             ${{ runner.os }}-node-
       
       - name: Install dependencies
-        run: |
-          cd chancey
-          npm ci
+        run: npm ci
       
       - name: Build project
-        run: |
-          cd chancey
-          npm run build
+        run: npm run build
         env:
           CI: false
       
       - name: Upload build artifacts
         uses: actions/upload-pages-artifact@v3
         with:
-          path: chancey/build
+          path: build
 
   deploy:
     environment:
