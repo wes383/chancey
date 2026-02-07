@@ -1,7 +1,8 @@
 import { useState, useMemo, useCallback, useEffect, useRef } from 'react';
 import { ethers } from 'ethers';
 import { useBlockchain } from './hooks/useBlockchain';
-import { Copy, Check } from 'lucide-react';
+import { Copy, Check, Share2, ChevronDown } from 'lucide-react';
+import { createDraw, revealDraw, cancelDraw } from './lib/drawApi';
 import './App.css';
 
 const STORAGE_KEY = 'chancey_state';
@@ -56,8 +57,13 @@ function App() {
   const [titleColor, setTitleColor] = useState('#333');
   const [titleFont, setTitleFont] = useState('Google Sans');
   const [titleVisible, setTitleVisible] = useState(true);
+  const [drawId, setDrawId] = useState(savedState?.drawId || null);
+  const [shareUrl, setShareUrl] = useState(savedState?.shareUrl || null);
+  const [shareUrlCopied, setShareUrlCopied] = useState(false);
+  const [shareButtonCopied, setShareButtonCopied] = useState(false);
   
   const resultBoxRef = useRef(null);
+  const cancelRef = useRef(false); // Use ref for immediate cancel check
 
   const FIXED_RULE = "Chancey_v1.0";
 
@@ -197,6 +203,8 @@ function App() {
       allowDuplicates,
       separator,
       serverSalt,
+      drawId,
+      shareUrl,
     };
     
     try {
@@ -205,7 +213,7 @@ function App() {
       console.error('Failed to save state:', error);
     }
   }, [seed, minValue, maxValue, numDraws, status, targetBlock, commit, result, 
-      blockOffset, blockMode, manualTargetBlock, allowDuplicates, separator, serverSalt]);
+      blockOffset, blockMode, manualTargetBlock, allowDuplicates, separator, serverSalt, drawId, shareUrl]);
 
   // Measure result box width
   useEffect(() => {
@@ -239,7 +247,7 @@ function App() {
           // If target block already passed, calculate result
           if (current >= targetBlock) {
             const block = await provider.getBlock(targetBlock);
-            if (block && !cancelWaiting) {
+            if (block && !cancelRef.current) {
               setIsCalculating(true);
               const draws = parseInt(numDraws) || 1;
               const { randomValues, combinedHashes } = calculateRandomNumbers(
@@ -267,12 +275,12 @@ function App() {
           } else {
             // Continue waiting
             const block = await waitForBlock(targetBlock, (latestBlock) => {
-              if (cancelWaiting) {
+              if (cancelRef.current) {
                 throw new Error('Cancelled by user');
               }
             });
 
-            if (!cancelWaiting) {
+            if (!cancelRef.current) {
               setIsCalculating(true);
               const draws = parseInt(numDraws) || 1;
               const { randomValues, combinedHashes } = calculateRandomNumbers(
@@ -299,9 +307,7 @@ function App() {
             }
           }
         } catch (err) {
-          if (err.message === 'Cancelled by user') {
-            console.log('Waiting cancelled by user');
-          } else {
+          if (err.message !== 'Cancelled by user') {
             console.error("Resume waiting error:", err);
             setError("Failed to resume: " + err.message);
           }
@@ -311,6 +317,7 @@ function App() {
 
       resumeWaiting();
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const computedTargetBlock = useMemo(() => {
@@ -525,11 +532,33 @@ function App() {
       const serverCommit = ethers.keccak256(serverSalt);
       setCommit(serverCommit);
 
+      // Create share link
+      let createdDrawId = null;
+      try {
+        const { drawId: newDrawId, url } = await createDraw({
+          userSeed: seed,
+          minValue: parseInt(minValue),
+          maxValue: parseInt(maxValue),
+          numDraws: parseInt(numDraws),
+          allowDuplicates,
+          separator,
+          targetBlock: target,
+          serverCommit
+        });
+        createdDrawId = newDrawId;
+        setDrawId(newDrawId);
+        setShareUrl(url);
+      } catch (err) {
+        console.error('❌ Failed to create share link:', err);
+        // Continue without share link
+      }
+
       // 2. Wait for Block using optimized hook
       try {
         setCancelWaiting(false);
+        cancelRef.current = false; // Reset cancel flag
         const block = await waitForBlock(target, (latestBlock) => {
-          if (cancelWaiting) {
+          if (cancelRef.current) {
             throw new Error('Cancelled by user');
           }
           if (latestBlock >= target) {
@@ -537,7 +566,7 @@ function App() {
           }
         });
 
-        if (cancelWaiting) {
+        if (cancelRef.current) {
           setStatus('idle');
           setIsCalculating(false);
           return;
@@ -545,6 +574,14 @@ function App() {
 
         // 3. Reveal & Calculate Phase
         setIsCalculating(true);
+        
+        // Check again before calculating in case user cancelled during block arrival
+        if (cancelRef.current) {
+          setStatus('idle');
+          setIsCalculating(false);
+          return;
+        }
+        
         const draws = parseInt(numDraws) || 1;
         const { randomValues, combinedHashes } = calculateRandomNumbers(
           block.hash,
@@ -554,6 +591,13 @@ function App() {
           maxValue,
           !allowDuplicates
         );
+
+        // Check again before setting result
+        if (cancelRef.current) {
+          setStatus('idle');
+          setIsCalculating(false);
+          return;
+        }
 
         setResult({
           randomValues,
@@ -567,17 +611,33 @@ function App() {
         });
         setIsCalculating(false);
         setStatus('revealed');
+
+        // Reveal draw on database
+        if (createdDrawId) {
+          try {
+            // Final check before revealing to database
+            if (cancelRef.current) {
+              return;
+            }
+            
+            await revealDraw(createdDrawId, {
+              serverSalt,
+              blockHash: block.hash,
+              results: randomValues,
+              combinedHashes
+            });
+          } catch (err) {
+            console.error('❌ Failed to reveal draw:', err);
+            // Continue even if reveal fails
+          }
+        }
       } catch (err) {
-        if (err.message === 'Cancelled by user') {
-          console.log('Waiting cancelled by user');
-          setStatus('idle');
-          setIsCalculating(false);
-        } else {
+        if (err.message !== 'Cancelled by user') {
           console.error("Waiting error:", err);
           setError("Error waiting for block: " + err.message);
-          setStatus('idle');
-          setIsCalculating(false);
         }
+        setStatus('idle');
+        setIsCalculating(false);
       }
 
     } catch (err) {
@@ -585,9 +645,9 @@ function App() {
       setError("Failed to start: " + err.message);
       setStatus('idle');
     }
-  }, [validateInputs, blockMode, blockOffset, manualTargetBlock, getProvider, waitForBlock, calculateRandomNumbers, numDraws, minValue, maxValue, allowDuplicates]);
+  }, [validateInputs, blockMode, blockOffset, manualTargetBlock, getProvider, waitForBlock, calculateRandomNumbers, numDraws, minValue, maxValue, allowDuplicates, seed, separator, drawId]);
 
-  const handleCancel = useCallback(() => {
+  const handleCancel = useCallback(async () => {
     if (cancelClickCount === 0) {
       setCancelClickCount(1);
       setTimeout(() => {
@@ -595,6 +655,7 @@ function App() {
       }, 4000);
     } else {
       setCancelWaiting(true);
+      cancelRef.current = true; // Set cancel flag immediately
       setStatus('idle');
       setResult(null);
       setError(null);
@@ -603,13 +664,27 @@ function App() {
       setCommit(null);
       setCancelClickCount(0);
       
+      // Cancel draw in database if it exists
+      if (drawId) {
+        try {
+          await cancelDraw(drawId);
+        } catch (err) {
+          console.error('❌ Failed to cancel draw in database:', err);
+        }
+      }
+      
+      setDrawId(null);
+      setShareUrl(null);
+      setShareUrlCopied(false);
+      
       try {
         localStorage.removeItem(STORAGE_KEY);
       } catch (error) {
         console.error('Failed to clear state:', error);
       }
     }
-  }, [cancelClickCount]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [cancelClickCount, drawId]);
 
   const handleReset = useCallback(() => {
     setStatus('idle');
@@ -619,6 +694,10 @@ function App() {
     setTargetBlock(null);
     setCommit(null);
     setCancelWaiting(false);
+    cancelRef.current = false; // Reset cancel flag
+    setDrawId(null);
+    setShareUrl(null);
+    setShareUrlCopied(false);
     
     try {
       localStorage.removeItem(STORAGE_KEY);
@@ -812,7 +891,17 @@ function App() {
             <div 
               className="advanced-toggle" 
               onClick={() => setShowAdvanced(!showAdvanced)}
+              style={{ display: 'flex', alignItems: 'center', gap: '4px', justifyContent: 'center' }}
             >
+              <ChevronDown 
+                size={18} 
+                style={{ 
+                  transform: showAdvanced ? 'rotate(180deg)' : 'rotate(0deg)',
+                  transition: 'transform 0.3s',
+                  position: 'relative',
+                  top: '1px'
+                }} 
+              />
               Advanced Options
             </div>
             
@@ -984,7 +1073,7 @@ function App() {
               marginTop: '30px',
               marginBottom: '10px',
               width: resultBoxWidth > 0 ? `${resultBoxWidth}px` : 'auto',
-              minWidth: '350px'
+              minWidth: '450px'
             }}>
               <div style={{ 
                 display: 'flex', 
@@ -1043,48 +1132,90 @@ function App() {
                     Sorted
                   </span>
                 </div>
-                <button
-                  onClick={() => {
-                    const displayValues = sortResults 
-                      ? [...result.randomValues].sort((a, b) => Number(a) - Number(b))
-                      : result.randomValues;
-                    const textToCopy = displayValues.join(separator.replace(/\\n/g, '\n'));
-                    navigator.clipboard.writeText(textToCopy);
-                    setCopied(true);
-                    setTimeout(() => setCopied(false), 2000);
-                  }}
-                  style={{
-                    background: 'rgba(255, 255, 255, 0.6)',
-                    border: '1px solid rgba(255, 255, 255, 0.4)',
-                    borderRadius: '50px',
-                    cursor: 'pointer',
-                    padding: '8px 16px',
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '6px',
-                    color: copied ? '#4CAF50' : '#666',
-                    transition: 'all 0.2s',
-                    fontSize: '0.9rem',
-                    fontFamily: "'Inter', sans-serif",
-                    backdropFilter: 'blur(10px)',
-                    boxShadow: '0 2px 10px rgba(0,0,0,0.05)',
-                    flexShrink: 0,
-                    whiteSpace: 'nowrap'
-                  }}
-                  onMouseOver={(e) => {
-                    if (!copied) {
-                      e.currentTarget.style.background = 'rgba(255, 255, 255, 0.8)';
-                      e.currentTarget.style.boxShadow = '0 5px 15px rgba(0, 0, 0, 0.1)';
-                    }
-                  }}
-                  onMouseOut={(e) => {
-                    e.currentTarget.style.background = 'rgba(255, 255, 255, 0.6)';
-                    e.currentTarget.style.boxShadow = '0 2px 10px rgba(0,0,0,0.05)';
-                  }}
-                >
-                  {copied ? <Check size={18} /> : <Copy size={18} />}
-                  {copied ? 'Copied!' : 'Copy'}
-                </button>
+                <div style={{ display: 'flex', gap: '8px', flexShrink: 0 }}>
+                  <button
+                    onClick={() => {
+                      const displayValues = sortResults 
+                        ? [...result.randomValues].sort((a, b) => Number(a) - Number(b))
+                        : result.randomValues;
+                      const textToCopy = displayValues.join(separator.replace(/\\n/g, '\n'));
+                      navigator.clipboard.writeText(textToCopy);
+                      setCopied(true);
+                      setTimeout(() => setCopied(false), 2000);
+                    }}
+                    style={{
+                      background: 'rgba(255, 255, 255, 0.6)',
+                      border: '1px solid rgba(255, 255, 255, 0.4)',
+                      borderRadius: '50px',
+                      cursor: 'pointer',
+                      padding: '8px 16px',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '6px',
+                      color: copied ? '#4CAF50' : '#666',
+                      transition: 'all 0.2s',
+                      fontSize: '0.9rem',
+                      fontFamily: "'Inter', sans-serif",
+                      backdropFilter: 'blur(10px)',
+                      boxShadow: '0 2px 10px rgba(0,0,0,0.05)',
+                      flexShrink: 0,
+                      whiteSpace: 'nowrap'
+                    }}
+                    onMouseOver={(e) => {
+                      if (!copied) {
+                        e.currentTarget.style.background = 'rgba(255, 255, 255, 0.8)';
+                        e.currentTarget.style.boxShadow = '0 5px 15px rgba(0, 0, 0, 0.1)';
+                      }
+                    }}
+                    onMouseOut={(e) => {
+                      e.currentTarget.style.background = 'rgba(255, 255, 255, 0.6)';
+                      e.currentTarget.style.boxShadow = '0 2px 10px rgba(0,0,0,0.05)';
+                    }}
+                  >
+                    {copied ? <Check size={18} /> : <Copy size={18} />}
+                    {copied ? 'Copied!' : 'Copy'}
+                  </button>
+                  {shareUrl && (
+                    <button
+                      onClick={() => {
+                        navigator.clipboard.writeText(shareUrl);
+                        setShareButtonCopied(true);
+                        setTimeout(() => setShareButtonCopied(false), 2000);
+                      }}
+                      style={{
+                        background: 'rgba(255, 255, 255, 0.6)',
+                        border: '1px solid rgba(255, 255, 255, 0.4)',
+                        borderRadius: '50px',
+                        cursor: 'pointer',
+                        padding: '8px 16px',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '6px',
+                        color: shareButtonCopied ? '#4CAF50' : '#666',
+                        transition: 'all 0.2s',
+                        fontSize: '0.9rem',
+                        fontFamily: "'Inter', sans-serif",
+                        backdropFilter: 'blur(10px)',
+                        boxShadow: '0 2px 10px rgba(0,0,0,0.05)',
+                        flexShrink: 0,
+                        whiteSpace: 'nowrap'
+                      }}
+                      onMouseOver={(e) => {
+                        if (!shareButtonCopied) {
+                          e.currentTarget.style.background = 'rgba(255, 255, 255, 0.8)';
+                          e.currentTarget.style.boxShadow = '0 5px 15px rgba(0, 0, 0, 0.1)';
+                        }
+                      }}
+                      onMouseOut={(e) => {
+                        e.currentTarget.style.background = 'rgba(255, 255, 255, 0.6)';
+                        e.currentTarget.style.boxShadow = '0 2px 10px rgba(0,0,0,0.05)';
+                      }}
+                    >
+                      {shareButtonCopied ? <Check size={18} /> : <Share2 size={18} />}
+                      {shareButtonCopied ? 'Copied!' : 'Share'}
+                    </button>
+                  )}
+                </div>
               </div>
             </div>
             <div ref={resultBoxRef} className="final-result-display" style={{ maxWidth: '800px', wordWrap: 'break-word', display: 'inline-block' }}>
@@ -1135,18 +1266,69 @@ function App() {
 
         {/* Status & Verification Section */}
         {status === 'waiting' && (
-          <div className="status-container">
-            <h3>Transaction Status</h3>
-            <div className="code-block" style={{ marginTop: '10px', marginBottom: '10px' }}>
-              <p><strong>Target Block:</strong> {targetBlock}</p>
-              <p><strong>Server Commit (Hash):</strong> {commit}</p>
+          <>
+            <div className="status-container">
+              <h3>Transaction Status</h3>
+              <div className="code-block" style={{ marginTop: '10px', marginBottom: '10px' }}>
+                <p><strong>Target Block:</strong> {targetBlock}</p>
+                <p><strong>Server Commit (Hash):</strong> {commit}</p>
+              </div>
+              <p className="pulsing">
+                {isCalculating 
+                  ? `Calculating results...` 
+                  : `Waiting for block ${targetBlock} to be mined...`}
+              </p>
             </div>
-            <p className="pulsing">
-              {isCalculating 
-                ? `Calculating results...` 
-                : `Waiting for block ${targetBlock} to be mined...`}
-            </p>
-          </div>
+
+            {shareUrl && (
+              <div style={{ 
+                display: 'flex',
+                gap: '8px',
+                marginTop: '20px',
+                justifyContent: 'center',
+                alignItems: 'center'
+              }}>
+                <button
+                  onClick={() => {
+                    navigator.clipboard.writeText(shareUrl);
+                    setShareUrlCopied(true);
+                    setTimeout(() => setShareUrlCopied(false), 2000);
+                  }}
+                  style={{
+                    background: 'rgba(255, 255, 255, 0.6)',
+                    border: '1px solid rgba(255, 255, 255, 0.4)',
+                    borderRadius: '50px',
+                    cursor: 'pointer',
+                    padding: '8px 16px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '6px',
+                    color: shareUrlCopied ? '#4CAF50' : '#666',
+                    transition: 'all 0.2s',
+                    fontSize: '0.9rem',
+                    fontFamily: "'Inter', sans-serif",
+                    backdropFilter: 'blur(10px)',
+                    boxShadow: '0 2px 10px rgba(0,0,0,0.05)',
+                    flexShrink: 0,
+                    whiteSpace: 'nowrap'
+                  }}
+                  onMouseOver={(e) => {
+                    if (!shareUrlCopied) {
+                      e.currentTarget.style.background = 'rgba(255, 255, 255, 0.8)';
+                      e.currentTarget.style.boxShadow = '0 5px 15px rgba(0, 0, 0, 0.1)';
+                    }
+                  }}
+                  onMouseOut={(e) => {
+                    e.currentTarget.style.background = 'rgba(255, 255, 255, 0.6)';
+                    e.currentTarget.style.boxShadow = '0 2px 10px rgba(0,0,0,0.05)';
+                  }}
+                >
+                  {shareUrlCopied ? <Check size={18} /> : <Share2 size={18} />}
+                  {shareUrlCopied ? 'Copied!' : 'Share'}
+                </button>
+              </div>
+            )}
+          </>
         )}
 
         {status === 'revealed' && result && (
@@ -1154,7 +1336,17 @@ function App() {
             <div 
               onClick={() => setShowDetails(!showDetails)}
               className="details-toggle"
+              style={{ display: 'flex', alignItems: 'center', gap: '4px', justifyContent: 'center' }}
             >
+              <ChevronDown 
+                size={18} 
+                style={{ 
+                  transform: showDetails ? 'rotate(180deg)' : 'rotate(0deg)',
+                  transition: 'transform 0.3s',
+                  position: 'relative',
+                  top: '1px'
+                }} 
+              />
               Details
             </div>
 
