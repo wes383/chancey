@@ -1,38 +1,317 @@
-import { useState, useMemo, useCallback } from 'react';
+import { useState, useMemo, useCallback, useEffect, useRef } from 'react';
 import { ethers } from 'ethers';
 import { useBlockchain } from './hooks/useBlockchain';
 import { Copy, Check } from 'lucide-react';
 import './App.css';
+
+const STORAGE_KEY = 'chancey_state';
 
 function App() {
   const generateRandomSeed = useCallback(() => {
     return ethers.hexlify(ethers.randomBytes(16));
   }, []);
 
-  const [seed, setSeed] = useState(() => generateRandomSeed());
-  const [minValue, setMinValue] = useState('1');
-  const [maxValue, setMaxValue] = useState('');
-  const [numDraws, setNumDraws] = useState('1');
-  const [status, setStatus] = useState('idle');
-  const [targetBlock, setTargetBlock] = useState(null);
-  const [commit, setCommit] = useState(null);
-  const [result, setResult] = useState(null);
+  // Load state from localStorage
+  const loadState = useCallback(() => {
+    try {
+      const saved = localStorage.getItem(STORAGE_KEY);
+      if (saved) {
+        return JSON.parse(saved);
+      }
+    } catch (error) {
+      console.error('Failed to load state:', error);
+    }
+    return null;
+  }, []);
+
+  const savedState = loadState();
+
+  const [seed, setSeed] = useState(() => savedState?.seed || generateRandomSeed());
+  const [minValue, setMinValue] = useState(savedState?.minValue || '1');
+  const [maxValue, setMaxValue] = useState(savedState?.maxValue || '');
+  const [numDraws, setNumDraws] = useState(savedState?.numDraws || '1');
+  const [status, setStatus] = useState(savedState?.status || 'idle');
+  const [targetBlock, setTargetBlock] = useState(savedState?.targetBlock || null);
+  const [commit, setCommit] = useState(savedState?.commit || null);
+  const [result, setResult] = useState(savedState?.result || null);
   const [error, setError] = useState(null);
   const [showAdvanced, setShowAdvanced] = useState(false);
-  const [blockOffset, setBlockOffset] = useState('3');
-  const [blockMode, setBlockMode] = useState('offset');
-  const [manualTargetBlock, setManualTargetBlock] = useState('');
+  const [blockOffset, setBlockOffset] = useState(savedState?.blockOffset || '3');
+  const [blockMode, setBlockMode] = useState(savedState?.blockMode || 'offset');
+  const [manualTargetBlock, setManualTargetBlock] = useState(savedState?.manualTargetBlock || '');
   const [showDetails, setShowDetails] = useState(false);
-  const [allowDuplicates, setAllowDuplicates] = useState(true);
+  const [allowDuplicates, setAllowDuplicates] = useState(savedState?.allowDuplicates ?? true);
   const [hoverNoDup, setHoverNoDup] = useState(false);
   const [hoverAllowDup, setHoverAllowDup] = useState(false);
-  const [separator, setSeparator] = useState(', ');
+  const [separator, setSeparator] = useState(savedState?.separator || ', ');
   const [copied, setCopied] = useState(false);
   const [sortResults, setSortResults] = useState(false);
+  const [serverSalt, setServerSalt] = useState(savedState?.serverSalt || null);
+  const [cancelWaiting, setCancelWaiting] = useState(false);
+  const [cancelClickCount, setCancelClickCount] = useState(0);
+  const [isCalculating, setIsCalculating] = useState(false);
+  const [resultBoxWidth, setResultBoxWidth] = useState(0);
+  const [titleItalic, setTitleItalic] = useState(false);
+  const [titleWeight, setTitleWeight] = useState(500);
+  const [titleColor, setTitleColor] = useState('#333');
+  const [titleFont, setTitleFont] = useState('Google Sans');
+  const [titleVisible, setTitleVisible] = useState(true);
+  
+  const resultBoxRef = useRef(null);
 
   const FIXED_RULE = "Chancey_v1.0";
 
+  const handleTitleClick = useCallback(() => {
+    // Hide title immediately
+    setTitleVisible(false);
+    
+    const fontConfig = {
+      'Google Sans': { weights: [400, 500, 600, 700], italic: true },
+      'Quicksand': { weights: [300, 400, 500, 600, 700], italic: false },
+      'Montserrat': { weights: [100, 200, 300, 400, 500, 600, 700, 800, 900], italic: true },
+      'Playpen Sans': { weights: [100, 200, 300, 400, 500, 600, 700, 800], italic: false },
+      'Doto': { weights: [100, 200, 300, 400, 500, 600, 700, 800, 900], italic: false },
+      'Playwrite CU': { weights: [100, 200, 300, 400], italic: false },
+      'Lora': { weights: [400, 500, 600, 700], italic: true },
+      'Oswald': { weights: [200, 300, 400, 500, 600, 700], italic: false }
+    };
+    
+    const fonts = Object.keys(fontConfig);
+    const randomFont = fonts[Math.floor(Math.random() * fonts.length)];
+    
+    const config = fontConfig[randomFont];
+    const randomWeight = config.weights[Math.floor(Math.random() * config.weights.length)];
+    
+    const canBeItalic = config.italic;
+    const isItalic = canBeItalic && Math.random() < 0.5;
+    
+    const colors = [
+      '#060', '#360', '#660', '#960', '#C60', '#F60',
+      '#063', '#363', '#663', '#963', '#C63', '#F63',
+      '#066', '#366', '#666', '#966', '#C66', '#F66',
+      '#069', '#369', '#669', '#969', '#C69', '#F69',
+      '#06C', '#36C', '#66C', '#96C', '#C6C', '#F6C',
+      '#06F', '#36F', '#66F', '#96F', '#C6F', '#F6F',
+      '#090', '#390', '#690', '#990', '#C90', '#F90',
+      '#093', '#393', '#693', '#993', '#C93', '#F93',
+      '#096', '#396', '#696', '#996', '#C96', '#F96',
+      '#099', '#399', '#699', '#999', '#C99', '#F99',
+      '#09C', '#39C', '#69C', '#99C', '#C9C', '#F9C',
+      '#09F', '#39F', '#69F', '#99F', '#C9F', '#F9F',
+      '#0C0', '#3C0', '#6C0', '#9C0', '#CC0', '#FC0',
+      '#0C3', '#3C3', '#6C3', '#9C3', '#CC3', '#FC3',
+      '#0C6', '#3C6', '#6C6', '#9C6', '#CC6', '#FC6',
+      '#0C9', '#3C9', '#6C9', '#9C9', '#CC9', '#FC9',
+      '#0CC', '#3CC', '#6CC', '#9CC', '#CCC', '#FCC',
+      '#0CF', '#3CF', '#6CF', '#9CF', '#CCF', '#FCF'
+    ];
+    const randomColor = colors[Math.floor(Math.random() * colors.length)];
+    
+    let finalColor = randomColor;
+    if (randomWeight >= 600 && Math.random() < 0.5) {
+      const gradients = [
+        'linear-gradient(135deg, #ff9a9e 0%, #fad0c4 100%)',
+        'linear-gradient(135deg, #a18cd1 0%, #fbc2eb 100%)',
+        'linear-gradient(135deg, #fad0c4 0%, #ffd1ff 100%)',
+        'linear-gradient(135deg, #ffecd2 0%, #fcb69f 100%)',
+        'linear-gradient(135deg, #ff9a9e 0%, #fecfef 100%)',
+        'linear-gradient(135deg, #f6d365 0%, #fda085 100%)',
+        'linear-gradient(135deg, #fbc2eb 0%, #a6c1ee 100%)',
+        'linear-gradient(135deg, #fdcbf1 0%, #e6dee9 100%)',
+        'linear-gradient(135deg, #a1c4fd 0%, #c2e9fb 100%)',
+        'linear-gradient(135deg, #d4fc79 0%, #96e6a1 100%)',
+        'linear-gradient(135deg, #84fab0 0%, #8fd3f4 100%)',
+        'linear-gradient(135deg, #a6c0fe 0%, #f68084 100%)',
+        'linear-gradient(135deg, #fccb90 0%, #d57eeb 100%)',
+        'linear-gradient(135deg, #e0c3fc 0%, #8ec5fc 100%)',
+        'linear-gradient(135deg, #f093fb 0%, #f5576c 100%)',
+        'linear-gradient(135deg, #7cf7ff 0%, #4b73ff 100%)',
+        'linear-gradient(135deg, #ffed46 0%, #ff7ec7 100%)',
+        'linear-gradient(135deg, #8fff85 0%, #39a0ff 100%)',
+        'linear-gradient(135deg, #8a88fb 0%, #d079ee 100%)',
+        'linear-gradient(135deg, #ffbb89 0%, #7b6ae0 100%)',
+        'linear-gradient(135deg, #4def8e 0%, #e0ca02 100%)',
+        'linear-gradient(135deg, #fc4504 0%, #a2fbbb 100%)',
+        'linear-gradient(135deg, #24cfc5 0%, #001c63 100%)',
+        'linear-gradient(135deg, #5ee2ff 0%, #00576a 100%)',
+        'linear-gradient(135deg, #b7dcff 0%, #ffa4f6 100%)',
+        'linear-gradient(135deg, #97e8b5 0%, #5cb67f 100%)',
+        'linear-gradient(135deg, #ffdc99 0%, #ff62c0 100%)',
+        'linear-gradient(135deg, #dde4ff 0%, #8da2ee 100%)',
+        'linear-gradient(135deg, #ffe70b 0%, #27b643 100%)',
+        'linear-gradient(135deg, #ffc328 0%, #e20000 100%)',
+        'linear-gradient(135deg, #ff5eef 0%, #456eff 100%)',
+        'linear-gradient(135deg, #4063bc 0%, #6b0013 100%)',
+        'linear-gradient(135deg, #afcccb 0%, #616566 100%)',
+        'linear-gradient(135deg, #ffe6a4 0%, #ad8211 100%)',
+        'linear-gradient(135deg, #c5edf5 0%, #4a879a 100%)',
+        'linear-gradient(135deg, #ffd439 0%, #ff7a00 100%)',
+        'linear-gradient(135deg, #3793ff 0%, #0017e4 100%)',
+        'linear-gradient(135deg, #a531dc 0%, #4300b1 100%)',
+        'linear-gradient(135deg, #ffeb3a 0%, #4def8e 100%)',
+        'linear-gradient(135deg, #dd7bff 0%, #ff6c6c 100%)',
+        'linear-gradient(135deg, #5d85a6 0%, #0e2c5e 100%)',
+        'linear-gradient(135deg, #24cfc5 0%, #001c63 100%)',
+        'linear-gradient(135deg, #ff5e98 0%, #0f213e 100%)',
+        'linear-gradient(135deg, #fff500 0%, #ffb800 100%)',
+        'linear-gradient(135deg, #e0ff87 0%, #8fb85b 100%)',
+        'linear-gradient(135deg, #b7dcff 0%, #ffa4f6 100%)',
+        'linear-gradient(135deg, #ff8570 0%, #418cb7 100%)',
+        'linear-gradient(135deg, #b9a14c 0%, #000000 100%)'
+      ];
+      finalColor = gradients[Math.floor(Math.random() * gradients.length)];
+    }
+    
+    const fontStyle = isItalic ? 'italic' : 'normal';
+    const fontString = `${fontStyle} ${randomWeight} 3rem "${randomFont}"`;
+    
+    document.fonts.load(fontString).then(() => {
+      setTitleFont(randomFont);
+      setTitleWeight(randomWeight);
+      setTitleItalic(isItalic);
+      setTitleColor(finalColor);
+      setTitleVisible(true);
+    }).catch(() => {
+      setTitleFont(randomFont);
+      setTitleWeight(randomWeight);
+      setTitleItalic(isItalic);
+      setTitleColor(finalColor);
+      setTimeout(() => setTitleVisible(true), 200);
+    });
+  }, []);
+
+  // Save state to localStorage
+  useEffect(() => {
+    const stateToSave = {
+      seed,
+      minValue,
+      maxValue,
+      numDraws,
+      status,
+      targetBlock,
+      commit,
+      result,
+      blockOffset,
+      blockMode,
+      manualTargetBlock,
+      allowDuplicates,
+      separator,
+      serverSalt,
+    };
+    
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(stateToSave));
+    } catch (error) {
+      console.error('Failed to save state:', error);
+    }
+  }, [seed, minValue, maxValue, numDraws, status, targetBlock, commit, result, 
+      blockOffset, blockMode, manualTargetBlock, allowDuplicates, separator, serverSalt]);
+
+  // Measure result box width
+  useEffect(() => {
+    if (resultBoxRef.current) {
+      const updateWidth = () => {
+        const width = resultBoxRef.current.offsetWidth;
+        setResultBoxWidth(width);
+      };
+      
+      setTimeout(updateWidth, 0);
+      
+      const resizeObserver = new ResizeObserver(updateWidth);
+      resizeObserver.observe(resultBoxRef.current);
+      
+      return () => {
+        resizeObserver.disconnect();
+      };
+    }
+  }, [result, sortResults, separator]);
+
   const { currentBlock, isConnected, getProvider, waitForBlock } = useBlockchain();
+
+  // Resume waiting if page was refreshed during waiting
+  useEffect(() => {
+    if (status === 'waiting' && targetBlock && commit && serverSalt && !cancelWaiting) {
+      const resumeWaiting = async () => {
+        try {
+          const provider = await getProvider();
+          const current = await provider.getBlockNumber();
+          
+          // If target block already passed, calculate result
+          if (current >= targetBlock) {
+            const block = await provider.getBlock(targetBlock);
+            if (block && !cancelWaiting) {
+              setIsCalculating(true);
+              const draws = parseInt(numDraws) || 1;
+              const { randomValues, combinedHashes } = calculateRandomNumbers(
+                block.hash,
+                serverSalt,
+                draws,
+                minValue,
+                maxValue,
+                !allowDuplicates
+              );
+
+              setResult({
+                randomValues,
+                serverSalt,
+                blockHash: block.hash,
+                targetBlock: targetBlock,
+                combinedHashes,
+                minValue,
+                maxValue,
+                draws,
+              });
+              setIsCalculating(false);
+              setStatus('revealed');
+            }
+          } else {
+            // Continue waiting
+            const block = await waitForBlock(targetBlock, (latestBlock) => {
+              if (cancelWaiting) {
+                throw new Error('Cancelled by user');
+              }
+            });
+
+            if (!cancelWaiting) {
+              setIsCalculating(true);
+              const draws = parseInt(numDraws) || 1;
+              const { randomValues, combinedHashes } = calculateRandomNumbers(
+                block.hash,
+                serverSalt,
+                draws,
+                minValue,
+                maxValue,
+                !allowDuplicates
+              );
+
+              setResult({
+                randomValues,
+                serverSalt,
+                blockHash: block.hash,
+                targetBlock: targetBlock,
+                combinedHashes,
+                minValue,
+                maxValue,
+                draws,
+              });
+              setIsCalculating(false);
+              setStatus('revealed');
+            }
+          }
+        } catch (err) {
+          if (err.message === 'Cancelled by user') {
+            console.log('Waiting cancelled by user');
+          } else {
+            console.error("Resume waiting error:", err);
+            setError("Failed to resume: " + err.message);
+          }
+          setStatus('idle');
+        }
+      };
+
+      resumeWaiting();
+    }
+  }, []);
 
   const computedTargetBlock = useMemo(() => {
     if (!currentBlock) return null;
@@ -242,15 +521,30 @@ function App() {
       setTargetBlock(target);
 
       const serverSalt = ethers.hexlify(ethers.randomBytes(32));
+      setServerSalt(serverSalt);
       const serverCommit = ethers.keccak256(serverSalt);
       setCommit(serverCommit);
 
       // 2. Wait for Block using optimized hook
       try {
+        setCancelWaiting(false);
         const block = await waitForBlock(target, (latestBlock) => {
+          if (cancelWaiting) {
+            throw new Error('Cancelled by user');
+          }
+          if (latestBlock >= target) {
+            setIsCalculating(true);
+          }
         });
 
+        if (cancelWaiting) {
+          setStatus('idle');
+          setIsCalculating(false);
+          return;
+        }
+
         // 3. Reveal & Calculate Phase
+        setIsCalculating(true);
         const draws = parseInt(numDraws) || 1;
         const { randomValues, combinedHashes } = calculateRandomNumbers(
           block.hash,
@@ -271,11 +565,19 @@ function App() {
           maxValue,
           draws,
         });
+        setIsCalculating(false);
         setStatus('revealed');
       } catch (err) {
-        console.error("Waiting error:", err);
-        setError("Error waiting for block: " + err.message);
-        setStatus('idle');
+        if (err.message === 'Cancelled by user') {
+          console.log('Waiting cancelled by user');
+          setStatus('idle');
+          setIsCalculating(false);
+        } else {
+          console.error("Waiting error:", err);
+          setError("Error waiting for block: " + err.message);
+          setStatus('idle');
+          setIsCalculating(false);
+        }
       }
 
     } catch (err) {
@@ -285,16 +587,78 @@ function App() {
     }
   }, [validateInputs, blockMode, blockOffset, manualTargetBlock, getProvider, waitForBlock, calculateRandomNumbers, numDraws, minValue, maxValue, allowDuplicates]);
 
+  const handleCancel = useCallback(() => {
+    if (cancelClickCount === 0) {
+      setCancelClickCount(1);
+      setTimeout(() => {
+        setCancelClickCount(0);
+      }, 4000);
+    } else {
+      setCancelWaiting(true);
+      setStatus('idle');
+      setResult(null);
+      setError(null);
+      setServerSalt(null);
+      setTargetBlock(null);
+      setCommit(null);
+      setCancelClickCount(0);
+      
+      try {
+        localStorage.removeItem(STORAGE_KEY);
+      } catch (error) {
+        console.error('Failed to clear state:', error);
+      }
+    }
+  }, [cancelClickCount]);
+
   const handleReset = useCallback(() => {
     setStatus('idle');
     setResult(null);
     setError(null);
+    setServerSalt(null);
+    setTargetBlock(null);
+    setCommit(null);
+    setCancelWaiting(false);
+    
+    try {
+      localStorage.removeItem(STORAGE_KEY);
+    } catch (error) {
+      console.error('Failed to clear state:', error);
+    }
   }, []);
 
   return (
     <div className="App">
       <header className="App-header">
-        <h1>Chancey</h1>
+        <h1 
+          onClick={handleTitleClick}
+          style={{ 
+            fontFamily: titleFont,
+            fontStyle: titleItalic ? 'italic' : 'normal',
+            fontWeight: titleWeight,
+            ...(titleColor && titleColor.startsWith('linear-gradient') ? {
+              backgroundImage: titleColor.replace('linear-gradient', 'linear-gradient'),
+              backgroundClip: 'text',
+              WebkitBackgroundClip: 'text',
+              WebkitTextFillColor: 'transparent',
+              color: 'transparent'
+            } : {
+              color: titleColor || '#333'
+            }),
+            cursor: 'pointer',
+            userSelect: 'none',
+            opacity: titleVisible ? 1 : 0,
+            transition: 'opacity 0.15s',
+            minHeight: '1.5em',
+            lineHeight: '1.2',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            padding: '0 0.2em'
+          }}
+        >
+          Chancey
+        </h1>
         
         {currentBlock !== null && !result && (
           <div className="block-info">
@@ -616,102 +980,114 @@ function App() {
         {result && (
           <>
             <div style={{ 
-              display: 'flex', 
-              alignItems: 'center', 
-              gap: '25px', 
+              position: 'relative',
               marginTop: '30px',
-              marginBottom: '10px'
+              marginBottom: '10px',
+              width: resultBoxWidth > 0 ? `${resultBoxWidth}px` : 'auto',
+              minWidth: '350px'
             }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <span style={{ fontSize: '0.9rem', color: !sortResults ? '#333' : '#bbb', lineHeight: '1', transition: 'color 0.2s' }}>
-                  Original
-                </span>
-                <label style={{ 
-                  position: 'relative', 
-                  display: 'block',
-                  width: '50px', 
-                  height: '24px',
-                  cursor: 'pointer',
-                  flexShrink: 0,
-                  margin: 0,
-                  padding: 0
-                }}>
-                  <input 
-                    type="checkbox" 
-                    checked={sortResults} 
-                    onChange={(e) => setSortResults(e.target.checked)}
-                    style={{ opacity: 0, width: 0, height: 0, position: 'absolute' }}
-                  />
-                  <span style={{
-                    position: 'absolute',
-                    top: 0,
-                    left: 0,
-                    right: 0,
-                    bottom: 0,
-                    backgroundColor: sortResults ? '#4CAF50' : '#ccc',
-                    borderRadius: '24px',
-                    transition: '0.3s',
-                    cursor: 'pointer'
+              <div style={{ 
+                display: 'flex', 
+                alignItems: 'center', 
+                justifyContent: 'space-between',
+                width: '100%',
+                paddingLeft: '5px',
+                paddingRight: '5px',
+                boxSizing: 'border-box'
+              }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexShrink: 0 }}>
+                  <span style={{ fontSize: '0.9rem', color: !sortResults ? '#333' : '#bbb', lineHeight: '1', transition: 'color 0.2s', whiteSpace: 'nowrap' }}>
+                    Original
+                  </span>
+                  <label style={{ 
+                    position: 'relative', 
+                    display: 'block',
+                    width: '50px', 
+                    height: '24px',
+                    cursor: 'pointer',
+                    flexShrink: 0,
+                    margin: 0,
+                    padding: 0
                   }}>
+                    <input 
+                      type="checkbox" 
+                      checked={sortResults} 
+                      onChange={(e) => setSortResults(e.target.checked)}
+                      style={{ opacity: 0, width: 0, height: 0, position: 'absolute' }}
+                    />
                     <span style={{
                       position: 'absolute',
-                      content: '""',
-                      height: '18px',
-                      width: '18px',
-                      left: sortResults ? '29px' : '3px',
-                      bottom: '3px',
-                      backgroundColor: 'white',
-                      borderRadius: '50%',
-                      transition: '0.3s'
-                    }}></span>
+                      top: 0,
+                      left: 0,
+                      right: 0,
+                      bottom: 0,
+                      backgroundColor: sortResults ? '#4CAF50' : '#ccc',
+                      borderRadius: '24px',
+                      transition: '0.3s',
+                      cursor: 'pointer'
+                    }}>
+                      <span style={{
+                        position: 'absolute',
+                        content: '""',
+                        height: '18px',
+                        width: '18px',
+                        left: sortResults ? '29px' : '3px',
+                        bottom: '3px',
+                        backgroundColor: 'white',
+                        borderRadius: '50%',
+                        transition: '0.3s'
+                      }}></span>
+                    </span>
+                  </label>
+                  <span style={{ fontSize: '0.9rem', color: sortResults ? '#333' : '#bbb', lineHeight: '1', transition: 'color 0.2s', whiteSpace: 'nowrap' }}>
+                    Sorted
                   </span>
-                </label>
-                <span style={{ fontSize: '0.9rem', color: sortResults ? '#333' : '#bbb', lineHeight: '1', transition: 'color 0.2s' }}>
-                  Sorted
-                </span>
+                </div>
+                <button
+                  onClick={() => {
+                    const displayValues = sortResults 
+                      ? [...result.randomValues].sort((a, b) => Number(a) - Number(b))
+                      : result.randomValues;
+                    const textToCopy = displayValues.join(separator.replace(/\\n/g, '\n'));
+                    navigator.clipboard.writeText(textToCopy);
+                    setCopied(true);
+                    setTimeout(() => setCopied(false), 2000);
+                  }}
+                  style={{
+                    background: 'rgba(255, 255, 255, 0.6)',
+                    border: '1px solid rgba(255, 255, 255, 0.4)',
+                    borderRadius: '50px',
+                    cursor: 'pointer',
+                    padding: '8px 16px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '6px',
+                    color: copied ? '#4CAF50' : '#666',
+                    transition: 'all 0.2s',
+                    fontSize: '0.9rem',
+                    fontFamily: "'Inter', sans-serif",
+                    backdropFilter: 'blur(10px)',
+                    boxShadow: '0 2px 10px rgba(0,0,0,0.05)',
+                    flexShrink: 0,
+                    whiteSpace: 'nowrap'
+                  }}
+                  onMouseOver={(e) => {
+                    if (!copied) {
+                      e.currentTarget.style.background = 'rgba(255, 255, 255, 0.8)';
+                      e.currentTarget.style.boxShadow = '0 5px 15px rgba(0, 0, 0, 0.1)';
+                    }
+                  }}
+                  onMouseOut={(e) => {
+                    e.currentTarget.style.background = 'rgba(255, 255, 255, 0.6)';
+                    e.currentTarget.style.boxShadow = '0 2px 10px rgba(0,0,0,0.05)';
+                  }}
+                >
+                  {copied ? <Check size={18} /> : <Copy size={18} />}
+                  {copied ? 'Copied!' : 'Copy'}
+                </button>
               </div>
-              <button
-                onClick={() => {
-                  const displayValues = sortResults 
-                    ? [...result.randomValues].sort((a, b) => Number(a) - Number(b))
-                    : result.randomValues;
-                  const textToCopy = displayValues.join(separator.replace(/\\n/g, '\n'));
-                  navigator.clipboard.writeText(textToCopy);
-                  setCopied(true);
-                  setTimeout(() => setCopied(false), 2000);
-                }}
-                style={{
-                  background: 'rgba(255, 255, 255, 0.6)',
-                  border: '1px solid rgba(255, 255, 255, 0.4)',
-                  borderRadius: '50px',
-                  cursor: 'pointer',
-                  padding: '8px 16px',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '6px',
-                  color: copied ? '#4CAF50' : '#666',
-                  transition: 'all 0.2s',
-                  fontSize: '0.9rem',
-                  fontFamily: "'Inter', sans-serif",
-                  backdropFilter: 'blur(10px)',
-                  boxShadow: '0 2px 10px rgba(0,0,0,0.05)'
-                }}
-                onMouseOver={(e) => {
-                  if (!copied) {
-                    e.currentTarget.style.background = 'rgba(255, 255, 255, 0.8)';
-                    e.currentTarget.style.boxShadow = '0 5px 15px rgba(0, 0, 0, 0.1)';
-                  }
-                }}
-                onMouseOut={(e) => {
-                  e.currentTarget.style.background = 'rgba(255, 255, 255, 0.6)';
-                  e.currentTarget.style.boxShadow = '0 2px 10px rgba(0,0,0,0.05)';
-                }}
-              >
-                {copied ? <Check size={18} /> : <Copy size={18} />}
-                {copied ? 'Copied!' : 'Copy'}
-              </button>
             </div>
-            <div className="final-result-display" style={{ maxWidth: '800px', wordWrap: 'break-word' }}>
+            <div ref={resultBoxRef} className="final-result-display" style={{ maxWidth: '800px', wordWrap: 'break-word', display: 'inline-block' }}>
               <h1 style={{ 
                 fontSize: result.randomValues.length > 1 ? '3rem' : '4rem', 
                 margin: 0, 
@@ -732,13 +1108,22 @@ function App() {
         )}
 
         <div className="button-container">
-          <button 
-            onClick={status === 'revealed' ? handleReset : handleStartRandom}
-            className="start-button"
-            disabled={status === 'waiting' || !isConnected}
-          >
-            {status === 'waiting' ? 'Waiting for Block...' : (status === 'revealed' ? 'Start New Round' : 'Start Random')}
-          </button>
+          {status === 'waiting' ? (
+            <button 
+              onClick={handleCancel}
+              className={`start-button cancel-button ${cancelClickCount > 0 ? 'cancel-confirm' : ''}`}
+            >
+              {cancelClickCount > 0 ? 'Click Again to Confirm' : 'Cancel'}
+            </button>
+          ) : (
+            <button 
+              onClick={status === 'revealed' ? handleReset : handleStartRandom}
+              className="start-button"
+              disabled={!isConnected}
+            >
+              {status === 'revealed' ? 'Start New Round' : 'Start Random'}
+            </button>
+          )}
 
           {error && (
             <div className="error-box">
@@ -755,7 +1140,11 @@ function App() {
               <p><strong>Target Block:</strong> {targetBlock}</p>
               <p><strong>Server Commit (Hash):</strong> {commit}</p>
             </div>
-            <p className="pulsing">Waiting for block {targetBlock} to be mined...</p>
+            <p className="pulsing">
+              {isCalculating 
+                ? `Calculating results...` 
+                : `Waiting for block ${targetBlock} to be mined...`}
+            </p>
           </div>
         )}
 
