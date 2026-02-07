@@ -38,15 +38,26 @@ function DrawPage() {
       setDrawData(updatedData);
     });
 
+    return () => {
+      unsubscribe();
+    };
+  }, [drawId]);
+
+  // Separate effect for polling
+  useEffect(() => {
     let pollInterval;
     if (drawData && drawData.status === 'waiting') {
-      pollInterval = setInterval(() => {
-        loadDraw();
+      pollInterval = setInterval(async () => {
+        try {
+          const data = await getDraw(drawId);
+          setDrawData(data);
+        } catch (err) {
+          console.error('Polling error:', err);
+        }
       }, 10000);
     }
 
     return () => {
-      unsubscribe();
       if (pollInterval) {
         clearInterval(pollInterval);
       }

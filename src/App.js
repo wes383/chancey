@@ -645,7 +645,7 @@ function App() {
       setError("Failed to start: " + err.message);
       setStatus('idle');
     }
-  }, [validateInputs, blockMode, blockOffset, manualTargetBlock, getProvider, waitForBlock, calculateRandomNumbers, numDraws, minValue, maxValue, allowDuplicates, seed, separator, drawId]);
+  }, [validateInputs, blockMode, blockOffset, manualTargetBlock, getProvider, waitForBlock, calculateRandomNumbers, numDraws, minValue, maxValue, allowDuplicates, seed, separator]);
 
   const handleCancel = useCallback(async () => {
     if (cancelClickCount === 0) {
