@@ -62,7 +62,7 @@ function DrawPage() {
         clearInterval(pollInterval);
       }
     };
-  }, [drawId, drawData?.status]);
+  }, [drawId, drawData]);
 
   const handleCopy = () => {
     if (drawData && drawData.status === 'revealed') {
