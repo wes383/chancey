@@ -1094,7 +1094,8 @@ function App() {
                 color: '#333', 
                 lineHeight: 1.5,
                 textWrap: 'balance',
-                whiteSpace: 'pre-wrap'
+                whiteSpace: 'pre-wrap',
+                fontFamily: 'Inter, sans-serif'
               }}>
                 {(() => {
                   const displayValues = sortResults 
