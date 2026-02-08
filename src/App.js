@@ -3,7 +3,7 @@ import { ethers } from 'ethers';
 import { useBlockchain } from './hooks/useBlockchain';
 import { Copy, Check, Share2, ChevronDown } from 'lucide-react';
 import { createDraw, revealDraw, cancelDraw } from './lib/drawApi';
-import { sanitizeText, sanitizeNumber, sanitizeSeparator, sanitizeSeed, sanitizeBlockNumber } from './utils/sanitize';
+import { sanitizeNumber, sanitizeSeparator, sanitizeSeed, sanitizeBlockNumber } from './utils/sanitize';
 import './App.css';
 
 const STORAGE_KEY = 'chancey_state';
