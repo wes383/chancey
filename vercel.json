@@ -11,7 +11,7 @@
       "headers": [
         {
           "key": "Content-Security-Policy",
-          "value": "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com data:; img-src 'self' data: https:; connect-src 'self' https://*.supabase.co https://*.publicnode.com https://*.llamarpc.com https://*.flashbots.net https://*.drpc.org https://*.infura.io https://*.alchemy.com https://*.quicknode.com https://*.tenderly.co https://*.merkle.io https://*.blockpi.network https://*.mevblocker.io https://1rpc.io https://0xrpc.io wss://*.publicnode.com wss://*.llamarpc.com wss://*.infura.io wss://*.alchemy.com wss://*.quicknode.com; frame-ancestors 'none'; base-uri 'self'; form-action 'self';"
+          "value": "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com data:; img-src 'self' data: https:; connect-src 'self' https://*.supabase.co https://*.publicnode.com https://*.llamarpc.com https://*.flashbots.net https://*.drpc.org https://*.infura.io https://*.alchemy.com https://*.quicknode.com https://*.tenderly.co https://*.merkle.io https://*.blockpi.network https://*.mevblocker.io https://1rpc.io https://0xrpc.io wss://*.publicnode.com wss://*.llamarpc.com wss://*.drpc.org wss://*.merkle.io wss://*.infura.io wss://*.alchemy.com wss://*.quicknode.com; frame-ancestors 'none'; base-uri 'self'; form-action 'self';"
         },
         {
           "key": "X-Frame-Options",
