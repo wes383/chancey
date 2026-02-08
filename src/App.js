@@ -3,6 +3,7 @@ import { ethers } from 'ethers';
 import { useBlockchain } from './hooks/useBlockchain';
 import { Copy, Check, Share2, ChevronDown } from 'lucide-react';
 import { createDraw, revealDraw, cancelDraw } from './lib/drawApi';
+import { sanitizeText, sanitizeNumber, sanitizeSeparator, sanitizeSeed, sanitizeBlockNumber } from './utils/sanitize';
 import './App.css';
 
 const STORAGE_KEY = 'chancey_state';
@@ -756,7 +757,8 @@ function App() {
                 type="number"
                 value={minValue}
                 onChange={(e) => {
-                  setMinValue(e.target.value);
+                  const sanitized = sanitizeNumber(e.target.value, { min: 0, allowNegative: false });
+                  setMinValue(sanitized);
                   setError(null);
                 }}
                 placeholder="Min"
@@ -767,7 +769,8 @@ function App() {
                 type="number"
                 value={maxValue}
                 onChange={(e) => {
-                  setMaxValue(e.target.value);
+                  const sanitized = sanitizeNumber(e.target.value, { min: 1, allowNegative: false });
+                  setMaxValue(sanitized);
                   setError(null);
                 }}
                 placeholder="Max"
@@ -783,7 +786,8 @@ function App() {
               type="number"
               value={numDraws}
               onChange={(e) => {
-                setNumDraws(e.target.value);
+                const sanitized = sanitizeNumber(e.target.value, { min: 1, max: 1000, allowNegative: false });
+                setNumDraws(sanitized);
                 setError(null);
               }}
               min="1"
@@ -914,7 +918,8 @@ function App() {
                       type="text"
                       value={seed}
                       onChange={(e) => {
-                        setSeed(e.target.value);
+                        const sanitized = sanitizeSeed(e.target.value);
+                        setSeed(sanitized);
                         setError(null);
                       }}
                       style={{ flex: 1, width: 'auto' }}
@@ -1018,7 +1023,8 @@ function App() {
                         type="number"
                         value={blockOffset}
                         onChange={(e) => {
-                          setBlockOffset(e.target.value);
+                          const sanitized = sanitizeNumber(e.target.value, { min: 2, max: 1000, allowNegative: false });
+                          setBlockOffset(sanitized);
                           setError(null);
                         }}
                         min="2"
@@ -1035,7 +1041,8 @@ function App() {
                         type="number"
                         value={manualTargetBlock}
                         onChange={(e) => {
-                          setManualTargetBlock(e.target.value);
+                          const sanitized = sanitizeBlockNumber(e.target.value);
+                          setManualTargetBlock(sanitized);
                           setError(null);
                         }}
                         min="0"
@@ -1052,7 +1059,10 @@ function App() {
                   <input
                     type="text"
                     value={separator}
-                    onChange={(e) => setSeparator(e.target.value)}
+                    onChange={(e) => {
+                      const sanitized = sanitizeSeparator(e.target.value);
+                      setSeparator(sanitized);
+                    }}
                     maxLength="10"
                     style={{ fontFamily: "'Inter', sans-serif" }}
                   />

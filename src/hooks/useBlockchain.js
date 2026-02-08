@@ -1,13 +1,23 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import RPCManager from '../utils/rpcManager';
 
-const RPC_URLS = [
+const DEFAULT_RPC_URLS = [
   'https://1rpc.io/eth',
   'https://ethereum-rpc.publicnode.com',
   'https://rpc.flashbots.net',
   'https://eth.llamarpc.com',
   'https://eth.drpc.org'
 ];
+
+const getRpcUrls = () => {
+  const envUrls = process.env.REACT_APP_RPC_URLS;
+  if (envUrls && envUrls.trim()) {
+    return envUrls.split(',').map(url => url.trim()).filter(url => url);
+  }
+  return DEFAULT_RPC_URLS;
+};
+
+const RPC_URLS = getRpcUrls();
 
 /**
  * Custom hook for blockchain interactions

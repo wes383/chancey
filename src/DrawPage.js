@@ -3,10 +3,12 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { getDraw, subscribeToDraw } from './lib/drawApi';
 import { useBlockchain } from './hooks/useBlockchain';
 import { Copy, Check, ChevronDown } from 'lucide-react';
+import { sanitizeUrlParam } from './utils/sanitize';
 import './App.css';
 
 function DrawPage() {
-  const { drawId } = useParams();
+  const { drawId: rawDrawId } = useParams();
+  const drawId = sanitizeUrlParam(rawDrawId || '');
   const navigate = useNavigate();
   const { currentBlock } = useBlockchain();
   

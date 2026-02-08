@@ -75,11 +75,19 @@ class RPCManager {
       return this.wsProvider;
     }
 
-    // Try WebSocket URLs
-    const wsUrls = [
-      'wss://ethereum-rpc.publicnode.com',
-      'wss://eth.llamarpc.com',
-    ];
+    // Get WebSocket URLs from environment or use defaults
+    const getWsUrls = () => {
+      const envWsUrls = process.env.REACT_APP_WS_RPC_URLS;
+      if (envWsUrls && envWsUrls.trim()) {
+        return envWsUrls.split(',').map(url => url.trim()).filter(url => url);
+      }
+      return [
+        'wss://ethereum-rpc.publicnode.com',
+        'wss://eth.llamarpc.com',
+      ];
+    };
+
+    const wsUrls = getWsUrls();
 
     for (const url of wsUrls) {
       try {

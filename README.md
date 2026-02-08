@@ -42,7 +42,7 @@ Uses [rejection sampling](https://en.wikipedia.org/wiki/Rejection_sampling) to e
 
 - Miners could theoretically choose not to mine a specific block
 - The server salt is currently generated in the browser using JavaScript's `crypto.getRandomValues()`
-- Creator token stored in localStorage
+- Creator token for authorizing the cancellation of a draw is stored in localStorage
 
 ## License
 

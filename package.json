@@ -9,6 +9,8 @@
     "@testing-library/jest-dom": "^6.9.1",
     "@testing-library/react": "^16.3.2",
     "@testing-library/user-event": "^13.5.0",
+    "@types/dompurify": "^3.0.5",
+    "dompurify": "^3.3.1",
     "ethers": "^6.16.0",
     "lucide-react": "^0.563.0",
     "nanoid": "^5.1.6",
