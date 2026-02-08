@@ -41,8 +41,8 @@ Uses [rejection sampling](https://en.wikipedia.org/wiki/Rejection_sampling) to e
 ## Limitations
 
 - Miners could theoretically choose not to mine a specific block
-- For high-value scenarios, consider more professional solutions
-- Creator token stored in localStorage (cleared if browser data is cleared)
+- The server salt is currently generated in the browser using JavaScript's `crypto.getRandomValues()`
+- Creator token stored in localStorage
 
 ## License
 
@@ -50,4 +50,5 @@ MIT License
 
 ## Disclaimer
 
-This project is for educational and research purposes only. Not recommended for high-value scenarios or production use without additional security audits and improvements.
+This project is for educational and research purposes only. For high-value scenarios, consider more professional solutions.
+
