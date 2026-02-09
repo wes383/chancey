@@ -430,6 +430,18 @@ function App() {
       return false;
     }
 
+    // PostgreSQL integer limit: -2,147,483,648 to 2,147,483,647
+    const MAX_INT = 2147483647;
+    if (min > MAX_INT) {
+      setError(`Min value cannot exceed ${MAX_INT.toLocaleString()}`);
+      return false;
+    }
+
+    if (max > MAX_INT) {
+      setError(`Max value cannot exceed ${MAX_INT.toLocaleString()}`);
+      return false;
+    }
+
     if (min >= max) {
       setError("Min value must be less than Max value");
       return false;
@@ -457,7 +469,7 @@ function App() {
     
     const MAX_SAFE_RANGE = 2n ** 128n;
     if (rangeBigInt > MAX_SAFE_RANGE) {
-      setError(`Range is too large. Maximum supported range is approximately 3.4e38`);
+      setError(`Range is too large.`);
       return false;
     }
 
@@ -495,6 +507,11 @@ function App() {
       }
       if (target < 0) {
         setError("Target block number cannot be negative");
+        return false;
+      }
+      // Max: 200 billion
+      if (target > 200000000000) {
+        setError("Target block number cannot exceed 200,000,000,000");
         return false;
       }
     }
@@ -826,25 +843,27 @@ function App() {
                 type="number"
                 value={minValue}
                 onChange={(e) => {
-                  const sanitized = sanitizeNumber(e.target.value, { min: 0, allowNegative: false });
+                  const sanitized = sanitizeNumber(e.target.value, { min: 0, max: 2147483647, allowNegative: false });
                   setMinValue(sanitized);
                   setError(null);
                 }}
                 placeholder="Min"
                 style={{ width: '50%' }}
                 min="0"
+                max="2147483647"
               />
               <input
                 type="number"
                 value={maxValue}
                 onChange={(e) => {
-                  const sanitized = sanitizeNumber(e.target.value, { min: 1, allowNegative: false });
+                  const sanitized = sanitizeNumber(e.target.value, { min: 1, max: 2147483647, allowNegative: false });
                   setMaxValue(sanitized);
                   setError(null);
                 }}
                 placeholder="Max"
                 style={{ width: '50%' }}
                 min="1"
+                max="2147483647"
               />
             </div>
           </div>

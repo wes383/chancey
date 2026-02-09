@@ -32,21 +32,21 @@ export function sanitizeNumber(input, options = {}) {
     return '';
   }
   
-  const num = parseInt(cleaned, 10);
-  
-  if (isNaN(num)) {
+  try {
+    const num = BigInt(cleaned);
+    
+    if (min !== null && num < BigInt(min)) {
+      return String(min);
+    }
+    
+    if (max !== null && num > BigInt(max)) {
+      return String(max);
+    }
+    
+    return cleaned;
+  } catch (e) {
     return '';
   }
-  
-  if (min !== null && num < min) {
-    return String(min);
-  }
-  
-  if (max !== null && num > max) {
-    return String(max);
-  }
-  
-  return String(num);
 }
 
 export function sanitizeSeparator(input) {
@@ -78,7 +78,8 @@ export function sanitizeBlockNumber(input) {
   if (String(input).includes('-')) {
     return '';
   }
-  return sanitizeNumber(input, { min: 0, allowNegative: false });
+  // Max: 200 billion
+  return sanitizeNumber(input, { min: 0, max: 200000000000, allowNegative: false });
 }
 
 export function sanitizeUrlParam(input) {
