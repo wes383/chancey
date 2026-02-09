@@ -365,8 +365,8 @@ function DrawPage() {
                     <hr/>
                     <p><strong>Algorithm: </strong>
                     Uses rejection sampling to eliminate modulo bias. For each draw, generates 
-                    solidityPackedKeccak256 with types [bytes32, string, string, bytes32, uint256, uint256] 
-                    and values [Block Hash, User Seed, Fixed Rule, Server Salt, Index, Attempt]. 
+                    Keccak256 hash using Solidity ABI packed encoding with types [bytes32, string, bytes32, string, uint256, uint256] 
+                    and values [Block Hash, User Seed, Server Salt, Fixed Rule, Index, Attempt]. 
                     Accepts only if the result is below the unbiased limit (2^256 - (2^256 % range)).
                     {!drawData.allow_duplicates && ' Additionally ensures no duplicate values by rejecting already-used numbers.'}</p>
                     <p style={{ fontSize: '0.9em', color: '#666', marginTop: '10px' }}>

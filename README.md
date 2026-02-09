@@ -19,8 +19,10 @@ Uses [rejection sampling](https://en.wikipedia.org/wiki/Rejection_sampling) to e
 
 ```
 1. Calculate limit = 2^256 - (2^256 % range)
-2. Generate hash = keccak256(
-     blockHash + userSeed + fixedRule + serverSalt + index + attempt
+2. Generate hash using Solidity ABI packed encoding:
+   solidityPackedKeccak256(
+     types: [bytes32, string, bytes32, string, uint256, uint256],
+     values: [blockHash, userSeed, serverSalt, fixedRule, index, attempt]
    )
 3. If hash < limit:
      a. Calculate candidate = (hash % range) + min
@@ -32,8 +34,8 @@ Uses [rejection sampling](https://en.wikipedia.org/wiki/Rejection_sampling) to e
 **Parameter Types**:
 - `blockHash`: bytes32 - Target block hash
 - `userSeed`: string - User-provided seed
-- `fixedRule`: string - Fixed rule ("Chancey_v1.0")
 - `serverSalt`: bytes32 - Server salt (revealed after block)
+- `fixedRule`: string - Fixed rule ("Chancey_v1.0")
 - `index`: uint256 - Draw index (0, 1, 2, ...)
 - `attempt`: uint256 - Rejection sampling attempt counter (0, 1, 2, ...)
 

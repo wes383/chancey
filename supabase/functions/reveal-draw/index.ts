@@ -3,6 +3,45 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { corsHeaders, getCorsHeaders } from "../_shared/cors.ts";
 import { keccak_256 } from "https://esm.sh/@noble/hashes@1.3.3/sha3";
 
+// Solidity ABI packed encoding
+function solidityPackedKeccak256(types: string[], values: any[]): string {
+  let packed = new Uint8Array(0);
+  
+  for (let i = 0; i < types.length; i++) {
+    const type = types[i];
+    const value = values[i];
+    let bytes: Uint8Array;
+    
+    if (type === 'bytes32') {
+      let hex = value.startsWith('0x') ? value.slice(2) : value;
+      if (hex.length > 64) throw new Error('bytes32 value too long');
+      hex = hex.padStart(64, '0');
+      bytes = new Uint8Array(hex.match(/.{2}/g)!.map((byte: string) => parseInt(byte, 16)));
+    } else if (type === 'string') {
+      bytes = new TextEncoder().encode(value);
+    } else if (type === 'uint256') {
+      let num = BigInt(value);
+      if (num < 0n) throw new Error('uint256 cannot be negative');
+      num = num % (2n ** 256n);
+      bytes = new Uint8Array(32);
+      for (let j = 31; j >= 0; j--) {
+        bytes[j] = Number(num & 0xFFn);
+        num >>= 8n;
+      }
+    } else {
+      throw new Error(`Unsupported type: ${type}`);
+    }
+    
+    const newPacked = new Uint8Array(packed.length + bytes.length);
+    newPacked.set(packed);
+    newPacked.set(bytes, packed.length);
+    packed = newPacked;
+  }
+  
+  const hash = keccak_256(packed);
+  return '0x' + Array.from(hash).map(b => b.toString(16).padStart(2, '0')).join('');
+}
+
 serve(async (req) => {
   const origin = req.headers.get('origin');
   const responseCorsHeaders = getCorsHeaders(origin);
@@ -157,8 +196,10 @@ async function calculateRandomNumbers(
     const MAX_ATTEMPTS = 1000;
     
     while (attempt < MAX_ATTEMPTS) {
-      const combinedData = `${blockHash}${userSeed}${FIXED_RULE}${serverSalt}${i}${attempt}`;
-      const combinedHash = await keccak256(combinedData);
+      const combinedHash = solidityPackedKeccak256(
+        ["bytes32", "string", "bytes32", "string", "uint256", "uint256"],
+        [blockHash, userSeed, serverSalt, FIXED_RULE, i, attempt]
+      );
       
       const bigNum = BigInt(combinedHash);
       
@@ -181,8 +222,10 @@ async function calculateRandomNumbers(
     
     if (attempt >= MAX_ATTEMPTS) {
       console.warn(`Rejection sampling exceeded ${MAX_ATTEMPTS} attempts for draw ${i}`);
-      const fallbackData = `${blockHash}${userSeed}${FIXED_RULE}${serverSalt}${i}${attempt - 1}`;
-      const fallbackHash = await keccak256(fallbackData);
+      const fallbackHash = solidityPackedKeccak256(
+        ["bytes32", "string", "bytes32", "string", "uint256", "uint256"],
+        [blockHash, userSeed, serverSalt, FIXED_RULE, i, attempt - 1]
+      );
       randomValue = (BigInt(fallbackHash) % range) + minBigInt;
       finalHash = fallbackHash;
     }
