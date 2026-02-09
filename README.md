@@ -11,7 +11,7 @@ Chancey is a web application that generates verifiable random numbers using Ethe
 1. **Commit Phase** - User inputs seed and range, system generates hash commitment of server salt
 2. **Wait for Block** - Wait for specified future block to be mined
 3. **Reveal Phase** - Calculate random number using block hash, user seed, and server salt
-4. **Share & Verify** - You can share results via URL
+4. **Share & Verify** - Share results via URL for verification
 
 ## Random Number Generation Algorithm
 
@@ -19,9 +19,8 @@ Uses [rejection sampling](https://en.wikipedia.org/wiki/Rejection_sampling) to e
 
 ```
 1. Calculate limit = 2^256 - (2^256 % range)
-2. Generate hash = solidityPackedKeccak256(
-     types: [bytes32, string, string, bytes32, uint256, uint256],
-     values: [blockHash, userSeed, fixedRule, serverSalt, index, attempt]
+2. Generate hash = keccak256(
+     blockHash + userSeed + fixedRule + serverSalt + index + attempt
    )
 3. If hash < limit:
      a. Calculate candidate = (hash % range) + min
@@ -38,11 +37,11 @@ Uses [rejection sampling](https://en.wikipedia.org/wiki/Rejection_sampling) to e
 - `index`: uint256 - Draw index (0, 1, 2, ...)
 - `attempt`: uint256 - Rejection sampling attempt counter (0, 1, 2, ...)
 
-## Limitations
+## Known Limitations
 
 - Miners could theoretically choose not to mine a specific block
-- The server salt is currently generated in the browser using JavaScript's `crypto.getRandomValues()`
-- Creator token for authorizing the cancellation of a draw is stored in localStorage
+- Depends on RPC node availability and accuracy
+- Session token is stored in sessionStorage and will be cleared when the browser is closed, after which the draw cannot be cancelled.
 
 ## License
 
@@ -51,4 +50,3 @@ MIT License
 ## Disclaimer
 
 This project is for educational and research purposes only. For high-value scenarios, consider more professional solutions.
-

@@ -2,7 +2,7 @@ import { useState, useMemo, useCallback, useEffect, useRef } from 'react';
 import { ethers } from 'ethers';
 import { useBlockchain } from './hooks/useBlockchain';
 import { Copy, Check, Share2, ChevronDown } from 'lucide-react';
-import { createDraw, revealDraw, cancelDraw } from './lib/drawApi';
+import { createDraw, revealDraw, cancelDraw, getDraw } from './lib/drawApi';
 import { sanitizeNumber, sanitizeSeparator, sanitizeSeed, sanitizeBlockNumber } from './utils/sanitize';
 import './App.css';
 
@@ -51,6 +51,8 @@ function App() {
   const [serverSalt, setServerSalt] = useState(savedState?.serverSalt || null);
   const [cancelWaiting, setCancelWaiting] = useState(false);
   const [cancelClickCount, setCancelClickCount] = useState(0);
+  const [isCancelling, setIsCancelling] = useState(false);
+  const [cancelFailed, setCancelFailed] = useState(false);
   const [isCalculating, setIsCalculating] = useState(false);
   const [resultBoxWidth, setResultBoxWidth] = useState(0);
   const [titleItalic, setTitleItalic] = useState(false);
@@ -64,7 +66,9 @@ function App() {
   const [shareButtonCopied, setShareButtonCopied] = useState(false);
   
   const resultBoxRef = useRef(null);
-  const cancelRef = useRef(false); // Use ref for immediate cancel check
+  const cancelRef = useRef(false);
+  const errorTimeoutRef = useRef(null);
+  const cancelConfirmTimeoutRef = useRef(null);
 
   const FIXED_RULE = "Chancey_v1.0";
 
@@ -239,39 +243,90 @@ function App() {
 
   // Resume waiting if page was refreshed during waiting
   useEffect(() => {
-    if (status === 'waiting' && targetBlock && commit && serverSalt && !cancelWaiting) {
+    if (status === 'waiting' && targetBlock && commit && drawId && !cancelWaiting) {
       const resumeWaiting = async () => {
         try {
+          const drawData = await getDraw(drawId);
+          
+          // If already revealed, just display the results
+          if (drawData.status === 'revealed') {
+            setServerSalt(drawData.server_salt);
+            setError(null);
+            setCancelFailed(false);
+            if (errorTimeoutRef.current) {
+              clearTimeout(errorTimeoutRef.current);
+              errorTimeoutRef.current = null;
+            }
+            setResult({
+              randomValues: drawData.results,
+              serverSalt: drawData.server_salt,
+              blockHash: drawData.block_hash,
+              targetBlock: drawData.target_block,
+              combinedHashes: drawData.combined_hashes,
+              minValue: drawData.min_value,
+              maxValue: drawData.max_value,
+              draws: drawData.num_draws,
+            });
+            setStatus('revealed');
+            return;
+          }
+          
+          // If cancelled, reset to idle
+          if (drawData.status === 'cancelled') {
+            setStatus('idle');
+            setError('This draw was cancelled');
+            return;
+          }
+          
+          // Otherwise, continue with normal waiting logic
           const provider = await getProvider();
           const current = await provider.getBlockNumber();
           
-          // If target block already passed, calculate result
+          // Check if target block already passed
           if (current >= targetBlock) {
             const block = await provider.getBlock(targetBlock);
             if (block && !cancelRef.current) {
               setIsCalculating(true);
-              const draws = parseInt(numDraws) || 1;
-              const { randomValues, combinedHashes } = calculateRandomNumbers(
-                block.hash,
-                serverSalt,
-                draws,
-                minValue,
-                maxValue,
-                !allowDuplicates
-              );
-
-              setResult({
-                randomValues,
-                serverSalt,
-                blockHash: block.hash,
-                targetBlock: targetBlock,
-                combinedHashes,
-                minValue,
-                maxValue,
-                draws,
-              });
-              setIsCalculating(false);
-              setStatus('revealed');
+              
+              // Call reveal-draw to get results from server
+              try {
+                const revealResult = await revealDraw(drawId, {
+                  blockHash: block.hash
+                });
+                
+                if (!revealResult.success) {
+                  throw new Error('Failed to reveal draw');
+                }
+                
+                setServerSalt(revealResult.serverSalt);
+                
+                if (!cancelRef.current) {
+                  setError(null);
+                  setCancelFailed(false);
+                  if (errorTimeoutRef.current) {
+                    clearTimeout(errorTimeoutRef.current);
+                    errorTimeoutRef.current = null;
+                  }
+                  
+                  setResult({
+                    randomValues: revealResult.randomValues,
+                    serverSalt: revealResult.serverSalt,
+                    blockHash: block.hash,
+                    targetBlock: targetBlock,
+                    combinedHashes: revealResult.combinedHashes,
+                    minValue,
+                    maxValue,
+                    draws: parseInt(numDraws) || 1,
+                  });
+                  setIsCalculating(false);
+                  setStatus('revealed');
+                }
+              } catch (err) {
+                console.error("Resume reveal error:", err);
+                setError("Failed to reveal: " + err.message);
+                setStatus('idle');
+                setIsCalculating(false);
+              }
             }
           } else {
             // Continue waiting
@@ -279,32 +334,54 @@ function App() {
               if (cancelRef.current) {
                 throw new Error('Cancelled by user');
               }
+              if (latestBlock >= targetBlock) {
+                setIsCalculating(true);
+              }
             });
 
             if (!cancelRef.current) {
               setIsCalculating(true);
-              const draws = parseInt(numDraws) || 1;
-              const { randomValues, combinedHashes } = calculateRandomNumbers(
-                block.hash,
-                serverSalt,
-                draws,
-                minValue,
-                maxValue,
-                !allowDuplicates
-              );
-
-              setResult({
-                randomValues,
-                serverSalt,
-                blockHash: block.hash,
-                targetBlock: targetBlock,
-                combinedHashes,
-                minValue,
-                maxValue,
-                draws,
-              });
-              setIsCalculating(false);
-              setStatus('revealed');
+              
+              // Call reveal-draw to get results from server
+              try {
+                const revealResult = await revealDraw(drawId, {
+                  blockHash: block.hash
+                });
+                
+                if (!revealResult.success) {
+                  throw new Error('Failed to reveal draw');
+                }
+                
+                setServerSalt(revealResult.serverSalt);
+                
+                if (!cancelRef.current) {
+                  // Clear error when result appears
+                  setError(null);
+                  setCancelFailed(false);
+                  if (errorTimeoutRef.current) {
+                    clearTimeout(errorTimeoutRef.current);
+                    errorTimeoutRef.current = null;
+                  }
+                  
+                  setResult({
+                    randomValues: revealResult.randomValues,
+                    serverSalt: revealResult.serverSalt,
+                    blockHash: block.hash,
+                    targetBlock: targetBlock,
+                    combinedHashes: revealResult.combinedHashes,
+                    minValue,
+                    maxValue,
+                    draws: parseInt(numDraws) || 1,
+                  });
+                  setIsCalculating(false);
+                  setStatus('revealed');
+                }
+              } catch (err) {
+                console.error("Resume reveal error:", err);
+                setError("Failed to reveal: " + err.message);
+                setStatus('idle');
+                setIsCalculating(false);
+              }
             }
           }
         } catch (err) {
@@ -425,69 +502,6 @@ function App() {
     return true;
   }, [minValue, maxValue, numDraws, seed, blockMode, blockOffset, manualTargetBlock, allowDuplicates]);
 
-  const calculateRandomNumbers = useCallback((blockHash, serverSalt, draws, min, max, noDuplicates) => {
-    const randomValues = [];
-    const combinedHashes = [];
-    const usedValues = new Set();
-    const minBigInt = BigInt(min);
-    const maxBigInt = BigInt(max);
-    const range = maxBigInt - minBigInt + 1n;
-
-    const MAX_UINT256 = 2n ** 256n;
-    
-    const limit = MAX_UINT256 - (MAX_UINT256 % range);
-
-    for (let i = 0; i < draws; i++) {
-      let randomValue;
-      let finalHash;
-      let attempt = 0;
-      const MAX_ATTEMPTS = 1000;
-      
-      // Rejection sampling: keep trying until we get a valid value
-      while (attempt < MAX_ATTEMPTS) {
-        const combinedHash = ethers.solidityPackedKeccak256(
-          ["bytes32", "string", "string", "bytes32", "uint256", "uint256"],
-          [blockHash, seed, FIXED_RULE, serverSalt, i, attempt]
-        );
-        
-        const bigNum = BigInt(combinedHash);
-        
-        if (bigNum < limit) {
-          const candidateValue = (bigNum % range) + minBigInt;
-          const valueStr = candidateValue.toString();
-          
-          // Check for duplicates if needed
-          if (!noDuplicates || !usedValues.has(valueStr)) {
-            randomValue = candidateValue;
-            finalHash = combinedHash;
-            if (noDuplicates) {
-              usedValues.add(valueStr);
-            }
-            break;
-          }
-        }
-        
-        attempt++;
-      }
-      
-      // Fallback: if we somehow exceed max attempts
-      if (attempt >= MAX_ATTEMPTS) {
-        console.warn(`Rejection sampling exceeded ${MAX_ATTEMPTS} attempts for draw ${i}. Using fallback.`);
-        const fallbackHash = ethers.solidityPackedKeccak256(
-          ["bytes32", "string", "string", "bytes32", "uint256", "uint256"],
-          [blockHash, seed, FIXED_RULE, serverSalt, i, attempt - 1]
-        );
-        randomValue = (BigInt(fallbackHash) % range) + minBigInt;
-        finalHash = fallbackHash;
-      }
-      
-      randomValues.push(randomValue.toString());
-      combinedHashes.push(finalHash);
-    }
-
-    return { randomValues, combinedHashes };
-  }, [seed, FIXED_RULE]);
-
   const handleStartRandom = useCallback(async () => {
     setError(null);
 
@@ -528,36 +542,34 @@ function App() {
 
       setTargetBlock(target);
 
-      const serverSalt = ethers.hexlify(ethers.randomBytes(32));
-      setServerSalt(serverSalt);
-      const serverCommit = ethers.keccak256(serverSalt);
-      setCommit(serverCommit);
-
-      // Create share link
+      // Create share link (server will generate serverSalt and serverCommit)
       let createdDrawId = null;
       try {
-        const { drawId: newDrawId, url } = await createDraw({
+        const response = await createDraw({
           userSeed: seed,
           minValue: parseInt(minValue),
           maxValue: parseInt(maxValue),
           numDraws: parseInt(numDraws),
           allowDuplicates,
           separator,
-          targetBlock: target,
-          serverCommit
+          targetBlock: target
         });
-        createdDrawId = newDrawId;
-        setDrawId(newDrawId);
-        setShareUrl(url);
+        createdDrawId = response.drawId;
+        setDrawId(response.drawId);
+        setShareUrl(response.url);
+        setCommit(response.serverCommit);
+        // Do NOT set serverSalt here - it will be fetched after block arrives
       } catch (err) {
-        console.error('❌ Failed to create share link:', err);
-        // Continue without share link
+        console.error('�?Failed to create share link:', err);
+        setError("Failed to create draw: " + err.message);
+        setStatus('idle');
+        return;
       }
 
       // 2. Wait for Block using optimized hook
       try {
         setCancelWaiting(false);
-        cancelRef.current = false; // Reset cancel flag
+        cancelRef.current = false;
         const block = await waitForBlock(target, (latestBlock) => {
           if (cancelRef.current) {
             throw new Error('Cancelled by user');
@@ -573,65 +585,54 @@ function App() {
           return;
         }
 
-        // 3. Reveal & Calculate Phase
+        // 3. Call reveal-draw to calculate results on server
         setIsCalculating(true);
         
-        // Check again before calculating in case user cancelled during block arrival
         if (cancelRef.current) {
           setStatus('idle');
           setIsCalculating(false);
           return;
         }
-        
-        const draws = parseInt(numDraws) || 1;
-        const { randomValues, combinedHashes } = calculateRandomNumbers(
-          block.hash,
-          serverSalt,
-          draws,
-          minValue,
-          maxValue,
-          !allowDuplicates
-        );
 
-        // Check again before setting result
+        // Call Edge Function to reveal and calculate
+        const revealResult = await revealDraw(createdDrawId, {
+          blockHash: block.hash
+        });
+        
+        if (!revealResult.success) {
+          throw new Error('Failed to reveal draw');
+        }
+        
+        setServerSalt(revealResult.serverSalt);
+        
         if (cancelRef.current) {
           setStatus('idle');
           setIsCalculating(false);
           return;
+        }
+
+        // Clear error when result appears
+
+        setError(null);
+
+        setCancelFailed(false);
+        if (errorTimeoutRef.current) {
+          clearTimeout(errorTimeoutRef.current);
+          errorTimeoutRef.current = null;
         }
 
         setResult({
-          randomValues,
-          serverSalt,
+          randomValues: revealResult.randomValues,
+          serverSalt: revealResult.serverSalt,
           blockHash: block.hash,
           targetBlock: target,
-          combinedHashes,
+          combinedHashes: revealResult.combinedHashes,
           minValue,
           maxValue,
-          draws,
+          draws: parseInt(numDraws) || 1,
         });
         setIsCalculating(false);
         setStatus('revealed');
-
-        // Reveal draw on database
-        if (createdDrawId) {
-          try {
-            // Final check before revealing to database
-            if (cancelRef.current) {
-              return;
-            }
-            
-            await revealDraw(createdDrawId, {
-              serverSalt,
-              blockHash: block.hash,
-              results: randomValues,
-              combinedHashes
-            });
-          } catch (err) {
-            console.error('❌ Failed to reveal draw:', err);
-            // Continue even if reveal fails
-          }
-        }
       } catch (err) {
         if (err.message !== 'Cancelled by user') {
           console.error("Waiting error:", err);
@@ -646,23 +647,67 @@ function App() {
       setError("Failed to start: " + err.message);
       setStatus('idle');
     }
-  }, [validateInputs, blockMode, blockOffset, manualTargetBlock, getProvider, waitForBlock, calculateRandomNumbers, numDraws, minValue, maxValue, allowDuplicates, seed, separator]);
+  }, [validateInputs, blockMode, blockOffset, manualTargetBlock, getProvider, waitForBlock, numDraws, minValue, maxValue, allowDuplicates, seed, separator]);
 
   const handleCancel = useCallback(async () => {
+    if (cancelFailed) {
+      if (cancelClickCount === 0) {
+        setCancelClickCount(1);
+        
+        if (cancelConfirmTimeoutRef.current) {
+          clearTimeout(cancelConfirmTimeoutRef.current);
+        }
+        cancelConfirmTimeoutRef.current = setTimeout(() => {
+          setCancelClickCount(0);
+          cancelConfirmTimeoutRef.current = null;
+        }, 4000);
+      } else {
+        setCancelWaiting(true);
+        cancelRef.current = true;
+        setStatus('idle');
+        setResult(null);
+        setError(null);
+        setServerSalt(null);
+        setTargetBlock(null);
+        setCommit(null);
+        setDrawId(null);
+        setShareUrl(null);
+        setShareUrlCopied(false);
+        setIsCancelling(false);
+        setCancelFailed(false);
+        setCancelClickCount(0);
+        
+        if (cancelConfirmTimeoutRef.current) {
+          clearTimeout(cancelConfirmTimeoutRef.current);
+          cancelConfirmTimeoutRef.current = null;
+        }
+        
+        try {
+          localStorage.removeItem(STORAGE_KEY);
+        } catch (error) {
+          console.error('Failed to clear state:', error);
+        }
+      }
+      return;
+    }
+    
     if (cancelClickCount === 0) {
       setCancelClickCount(1);
-      setTimeout(() => {
+      
+      if (cancelConfirmTimeoutRef.current) {
+        clearTimeout(cancelConfirmTimeoutRef.current);
+      }
+      cancelConfirmTimeoutRef.current = setTimeout(() => {
         setCancelClickCount(0);
+        cancelConfirmTimeoutRef.current = null;
       }, 4000);
     } else {
-      setCancelWaiting(true);
-      cancelRef.current = true; // Set cancel flag immediately
-      setStatus('idle');
-      setResult(null);
-      setError(null);
-      setServerSalt(null);
-      setTargetBlock(null);
-      setCommit(null);
+      if (cancelConfirmTimeoutRef.current) {
+        clearTimeout(cancelConfirmTimeoutRef.current);
+        cancelConfirmTimeoutRef.current = null;
+      }
+      
+      setIsCancelling(true);
       setCancelClickCount(0);
       
       // Cancel draw in database if it exists
@@ -670,13 +715,37 @@ function App() {
         try {
           await cancelDraw(drawId);
         } catch (err) {
-          console.error('❌ Failed to cancel draw in database:', err);
+          console.error('�?Failed to cancel draw in database:', err);
+          setError(`Failed to cancel: ${err.message}. The draw may still be active on the server.`);
+          
+          if (errorTimeoutRef.current) {
+            clearTimeout(errorTimeoutRef.current);
+          }
+          errorTimeoutRef.current = setTimeout(() => {
+            setError(null);
+            errorTimeoutRef.current = null;
+          }, 8000);
+          
+          setIsCancelling(false);
+          setCancelClickCount(0);
+          setCancelFailed(true);
+          return;
         }
       }
       
+      setCancelWaiting(true);
+      cancelRef.current = true;
+      
+      setStatus('idle');
+      setResult(null);
+      setError(null);
+      setServerSalt(null);
+      setTargetBlock(null);
+      setCommit(null);
       setDrawId(null);
       setShareUrl(null);
       setShareUrlCopied(false);
+      setIsCancelling(false);
       
       try {
         localStorage.removeItem(STORAGE_KEY);
@@ -1254,8 +1323,9 @@ function App() {
             <button 
               onClick={handleCancel}
               className={`start-button cancel-button ${cancelClickCount > 0 ? 'cancel-confirm' : ''}`}
+              disabled={isCancelling}
             >
-              {cancelClickCount > 0 ? 'Click Again to Confirm' : 'Cancel'}
+              {isCancelling ? 'Cancelling...' : (cancelFailed ? (cancelClickCount > 0 ? 'Click Again to Confirm' : 'Back to Home Anyway') : (cancelClickCount > 0 ? 'Click Again to Confirm' : 'Cancel'))}
             </button>
           ) : (
             <button 
@@ -1273,6 +1343,17 @@ function App() {
             </div>
           )}
         </div>
+
+        {status === 'waiting' && (
+          <p style={{ 
+            fontSize: '0.85rem', 
+            color: '#666', 
+            margin: '8px 0 0 0',
+            textAlign: 'center'
+          }}>
+            You can close the page and return later. But you cannot cancel the draw after closing the browser.
+          </p>
+        )}
 
         {/* Status & Verification Section */}
         {status === 'waiting' && (
@@ -1381,7 +1462,7 @@ function App() {
                     <hr/>
                     <p><strong>Algorithm: </strong>
                     Uses rejection sampling to eliminate modulo bias. For each draw, generates 
-                    solidityPackedKeccak256 with types [bytes32, string, string, bytes32, uint256, uint256] 
+                    Keccak256 with types [bytes32, string, string, bytes32, uint256, uint256] 
                     and values [Block Hash, User Seed, Fixed Rule, Server Salt, Index, Attempt]. 
                     Accepts only if the result is below the unbiased limit (2^256 - (2^256 % range)).
                     {!allowDuplicates && ' Additionally ensures no duplicate values by rejecting already-used numbers.'}</p>
@@ -1413,8 +1494,8 @@ function App() {
         target="_blank"
         rel="noopener noreferrer"
         style={{
-          position: 'fixed',
-          bottom: '16px',
+          position: 'absolute',
+          top: '21px',
           right: '24px',
           width: '32px',
           height: '32px',
@@ -1422,7 +1503,6 @@ function App() {
           alignItems: 'center',
           justifyContent: 'center',
           transition: 'opacity 0.3s ease',
-          zIndex: 1000,
           opacity: 0.6
         }}
         onMouseOver={(e) => {

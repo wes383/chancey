@@ -1,15 +1,5 @@
 import { supabase } from './supabase';
-import { nanoid } from 'nanoid';
 import { ethers } from 'ethers';
-
-function getCreatorToken() {
-  let creatorToken = localStorage.getItem('creator_token');
-  if (!creatorToken) {
-    creatorToken = ethers.hexlify(ethers.randomBytes(32));
-    localStorage.setItem('creator_token', creatorToken);
-  }
-  return creatorToken;
-}
 
 export async function createDraw({
   userSeed,
@@ -18,83 +8,70 @@ export async function createDraw({
   numDraws,
   allowDuplicates,
   separator,
-  targetBlock,
-  serverCommit
+  targetBlock
 }) {
-  const drawId = nanoid(8);
-  const creatorToken = getCreatorToken();
-  
-  const { error } = await supabase
-    .from('draws')
-    .insert({
-      id: drawId,
-      user_seed: userSeed,
-      min_value: minValue,
-      max_value: maxValue,
-      num_draws: numDraws,
-      allow_duplicates: allowDuplicates,
-      separator: separator,
-      target_block: targetBlock,
-      server_commit: serverCommit,
-      creator_token: creatorToken,
-      status: 'waiting'
-    })
-    .select()
-    .single();
-  
-  if (error) {
-    console.error('Error creating draw:', error);
-    throw error;
-  }
-  
-  return {
-    drawId,
-    url: `${window.location.origin}/draw/${drawId}`
-  };
-}
+  const response = await fetch(
+    `${process.env.REACT_APP_SUPABASE_URL}/functions/v1/create-draw`,
+    {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${process.env.REACT_APP_SUPABASE_ANON_KEY}`
+      },
+      body: JSON.stringify({
+        userSeed,
+        minValue,
+        maxValue,
+        numDraws,
+        allowDuplicates,
+        separator,
+        targetBlock
+      })
+    }
+  );
 
-export async function revealDraw(drawId, { serverSalt, blockHash, results, combinedHashes }) {
-  const { data: draw, error: fetchError } = await supabase
-    .from('draws')
-    .select('server_commit')
-    .eq('id', drawId)
-    .single();
-  
-  if (fetchError) {
-    console.error('Error fetching draw:', fetchError);
-    throw fetchError;
+  if (!response.ok) {
+    const error = await response.json();
+    throw new Error(error.error || 'Failed to create draw');
   }
+
+  const data = await response.json();
   
-  const computedCommit = ethers.keccak256(serverSalt);
-  if (computedCommit !== draw.server_commit) {
-    throw new Error('Invalid server salt: commit mismatch');
-  }
-  
-  const { data, error } = await supabase
-    .from('draws')
-    .update({
-      server_salt: serverSalt,
-      block_hash: blockHash,
-      results: results,
-      combined_hashes: combinedHashes,
-      status: 'revealed',
-      revealed_at: new Date().toISOString()
-    })
-    .eq('id', drawId)
-    .select()
-    .single();
-  
-  if (error) {
-    console.error('Error revealing draw:', error);
-    throw error;
+  // Store session token in sessionStorage
+  if (data.sessionToken) {
+    sessionStorage.setItem(`draw_session_${data.drawId}`, data.sessionToken);
   }
   
   return data;
 }
 
+export async function revealDraw(drawId, { blockHash }) {
+  const response = await fetch(
+    `${process.env.REACT_APP_SUPABASE_URL}/functions/v1/reveal-draw`,
+    {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${process.env.REACT_APP_SUPABASE_ANON_KEY}`
+      },
+      body: JSON.stringify({
+        drawId,
+        blockHash
+      })
+    }
+  );
+
+  if (!response.ok) {
+    const error = await response.json();
+    throw new Error(error.error || 'Failed to reveal draw');
+  }
+
+  return await response.json();
+}
+
 export async function getDraw(drawId) {
   const { data, error } = await supabase
-    .from('draws')
+    .from('public_draws')
     .select('*')
     .eq('id', drawId)
     .single();
@@ -118,8 +95,16 @@ export function subscribeToDraw(drawId, callback) {
         table: 'draws',
         filter: `id=eq.${drawId}`
       },
-      (payload) => {
-        callback(payload.new);
+      async (payload) => {
+        const { data } = await supabase
+          .from('public_draws')
+          .select('*')
+          .eq('id', drawId)
+          .single();
+        
+        if (data) {
+          callback(data);
+        }
       }
     )
     .subscribe();
@@ -131,29 +116,32 @@ export function subscribeToDraw(drawId, callback) {
 
 export async function cancelDraw(drawId) {
   if (!drawId) return;
-  
-  const creatorToken = localStorage.getItem('creator_token');
-  if (!creatorToken) {
-    throw new Error('No creator token found. Cannot cancel draw.');
+
+  const sessionToken = sessionStorage.getItem(`draw_session_${drawId}`);
+  if (!sessionToken) {
+    throw new Error('No session found. Cannot cancel draw.');
   }
-  
-  try {
-    const { data, error } = await supabase
-      .rpc('cancel_draw', {
-        p_draw_id: drawId,
-        p_creator_token: creatorToken
-      });
-    
-    if (error) throw error;
-    
-    if (!data) {
-      throw new Error('Not authorized to cancel this draw or draw not found');
+
+  const response = await fetch(
+    `${process.env.REACT_APP_SUPABASE_URL}/functions/v1/cancel-draw`,
+    {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${process.env.REACT_APP_SUPABASE_ANON_KEY}`
+      },
+      body: JSON.stringify({ drawId, sessionToken })
     }
-    
-    return data;
-  } catch (err) {
-    throw err;
+  );
+
+  if (!response.ok) {
+    const error = await response.json();
+    throw new Error(error.error || 'Failed to cancel draw');
   }
+
+  sessionStorage.removeItem(`draw_session_${drawId}`);
+
+  return await response.json();
 }
 
 export function verifyDraw(drawData) {

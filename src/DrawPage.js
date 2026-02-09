@@ -397,8 +397,8 @@ function DrawPage() {
         target="_blank"
         rel="noopener noreferrer"
         style={{
-          position: 'fixed',
-          bottom: '16px',
+          position: 'absolute',
+          top: '21px',
           right: '24px',
           width: '32px',
           height: '32px',
@@ -406,7 +406,6 @@ function DrawPage() {
           alignItems: 'center',
           justifyContent: 'center',
           transition: 'opacity 0.3s ease',
-          zIndex: 1000,
           opacity: 0.6
         }}
         onMouseOver={(e) => {

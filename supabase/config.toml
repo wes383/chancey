@@ -1,0 +1,12 @@
+[api]
+enabled = true
+port = 54321
+schemas = ["public"]
+extra_search_path = ["public"]
+max_rows = 1000
+
+[functions.create-draw]
+verify_jwt = false
+
+[functions.cancel-draw]
+verify_jwt = false
