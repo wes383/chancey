@@ -323,6 +323,38 @@ function App() {
                 }
               } catch (err) {
                 console.error("Resume reveal error:", err);
+                
+                // If draw already revealed, fetch the existing result
+                if (err.message.includes('already revealed')) {
+                  try {
+                    const drawData = await getDraw(drawId);
+                    if (drawData.status === 'revealed') {
+                      setServerSalt(drawData.server_salt);
+                      setError(null);
+                      setCancelFailed(false);
+                      if (errorTimeoutRef.current) {
+                        clearTimeout(errorTimeoutRef.current);
+                        errorTimeoutRef.current = null;
+                      }
+                      setResult({
+                        randomValues: drawData.results,
+                        serverSalt: drawData.server_salt,
+                        blockHash: drawData.block_hash,
+                        targetBlock: drawData.target_block,
+                        combinedHashes: drawData.combined_hashes,
+                        minValue: drawData.min_value,
+                        maxValue: drawData.max_value,
+                        draws: drawData.num_draws,
+                      });
+                      setIsCalculating(false);
+                      setStatus('revealed');
+                      return;
+                    }
+                  } catch (fetchErr) {
+                    console.error("Failed to fetch existing result:", fetchErr);
+                  }
+                }
+                
                 setError("Failed to reveal: " + err.message);
                 setStatus('idle');
                 setIsCalculating(false);
@@ -378,6 +410,38 @@ function App() {
                 }
               } catch (err) {
                 console.error("Resume reveal error:", err);
+                
+                // If draw already revealed, fetch the existing result
+                if (err.message.includes('already revealed')) {
+                  try {
+                    const drawData = await getDraw(drawId);
+                    if (drawData.status === 'revealed') {
+                      setServerSalt(drawData.server_salt);
+                      setError(null);
+                      setCancelFailed(false);
+                      if (errorTimeoutRef.current) {
+                        clearTimeout(errorTimeoutRef.current);
+                        errorTimeoutRef.current = null;
+                      }
+                      setResult({
+                        randomValues: drawData.results,
+                        serverSalt: drawData.server_salt,
+                        blockHash: drawData.block_hash,
+                        targetBlock: drawData.target_block,
+                        combinedHashes: drawData.combined_hashes,
+                        minValue: drawData.min_value,
+                        maxValue: drawData.max_value,
+                        draws: drawData.num_draws,
+                      });
+                      setIsCalculating(false);
+                      setStatus('revealed');
+                      return;
+                    }
+                  } catch (fetchErr) {
+                    console.error("Failed to fetch existing result:", fetchErr);
+                  }
+                }
+                
                 setError("Failed to reveal: " + err.message);
                 setStatus('idle');
                 setIsCalculating(false);
@@ -653,6 +717,38 @@ function App() {
       } catch (err) {
         if (err.message !== 'Cancelled by user') {
           console.error("Waiting error:", err);
+          
+          // If draw already revealed, fetch the existing result
+          if (err.message.includes('already revealed') && createdDrawId) {
+            try {
+              const drawData = await getDraw(createdDrawId);
+              if (drawData.status === 'revealed') {
+                setServerSalt(drawData.server_salt);
+                setError(null);
+                setCancelFailed(false);
+                if (errorTimeoutRef.current) {
+                  clearTimeout(errorTimeoutRef.current);
+                  errorTimeoutRef.current = null;
+                }
+                setResult({
+                  randomValues: drawData.results,
+                  serverSalt: drawData.server_salt,
+                  blockHash: drawData.block_hash,
+                  targetBlock: drawData.target_block,
+                  combinedHashes: drawData.combined_hashes,
+                  minValue: drawData.min_value,
+                  maxValue: drawData.max_value,
+                  draws: drawData.num_draws,
+                });
+                setIsCalculating(false);
+                setStatus('revealed');
+                return;
+              }
+            } catch (fetchErr) {
+              console.error("Failed to fetch existing result:", fetchErr);
+            }
+          }
+          
           setError("Error waiting for block: " + err.message);
         }
         setStatus('idle');

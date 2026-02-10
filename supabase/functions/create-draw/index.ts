@@ -31,7 +31,7 @@ serve(async (req) => {
 
     // Generate server salt and commit on server side
     const serverSalt = generateServerSalt();
-    const serverCommit = await keccak256(serverSalt);
+    const serverCommit = await hashKeccak256(serverSalt);
 
     const sessionToken = crypto.randomUUID();
     const expiresAt = new Date();
@@ -129,7 +129,7 @@ function generateServerSalt(): string {
   return '0x' + Array.from(bytes).map(b => b.toString(16).padStart(2, '0')).join('');
 }
 
-async function keccak256(data: string): Promise<string> {
+async function hashKeccak256(data: string): Promise<string> {
   const encoder = new TextEncoder();
   const dataBytes = encoder.encode(data);
   const hashBytes = keccak_256(dataBytes);

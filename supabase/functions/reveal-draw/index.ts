@@ -2,6 +2,43 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { corsHeaders, getCorsHeaders } from "../_shared/cors.ts";
 import { keccak_256 } from "https://esm.sh/@noble/hashes@1.3.3/sha3";
+import { JsonRpcProvider } from "https://esm.sh/ethers@6.7.0";
+
+const DEFAULT_RPC_URLS = [
+  'https://eth.llamarpc.com',
+  'https://1rpc.io/eth',
+  'https://ethereum-rpc.publicnode.com',
+  'https://rpc.flashbots.net',
+  'https://eth.drpc.org'
+];
+
+function getRpcUrls(): string[] {
+  const envUrls = Deno.env.get('ETH_RPC_URLS');
+  if (envUrls && envUrls.trim()) {
+    return envUrls.split(',').map(url => url.trim()).filter(url => url);
+  }
+  return DEFAULT_RPC_URLS;
+}
+
+const RPC_URLS = getRpcUrls();
+
+async function getFastestBlock(blockNumber: number): Promise<any> {
+  const promises = RPC_URLS.map(async (url) => {
+    try {
+      const provider = new JsonRpcProvider(url);
+      const block = await provider.getBlock(blockNumber);
+      return block;
+    } catch (error) {
+      throw new Error(`RPC ${url} failed: ${error.message}`);
+    }
+  });
+  
+  try {
+    return await Promise.race(promises);
+  } catch (error) {
+    throw new Error('All RPC nodes failed to fetch block');
+  }
+}
 
 // Solidity ABI packed encoding
 function solidityPackedKeccak256(types: string[], values: any[]): string {
@@ -95,11 +132,43 @@ serve(async (req) => {
     }
 
     // Verify server_commit matches server_salt
-    const computedCommit = await keccak256(draw.server_salt);
+    const computedCommit = await hashKeccak256(draw.server_salt);
     if (computedCommit !== draw.server_commit) {
       console.error('Server salt verification failed');
       return new Response(
         JSON.stringify({ error: 'Server integrity check failed' }),
+        { status: 500, headers: { ...responseCorsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    // Verify block hash from blockchain
+    try {
+      const block = await getFastestBlock(draw.target_block);
+      
+      if (!block) {
+        return new Response(
+          JSON.stringify({ error: 'Target block not found. Block may not have been mined yet.' }),
+          { status: 400, headers: { ...responseCorsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+      
+      if (block.hash !== blockHash) {
+        console.error(`Block hash mismatch: expected ${block.hash}, got ${blockHash}`);
+        return new Response(
+          JSON.stringify({ 
+            error: 'Block hash verification failed. The provided hash does not match the blockchain.',
+            expectedHash: block.hash,
+            providedHash: blockHash
+          }),
+          { status: 400, headers: { ...responseCorsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+      
+      console.log(`Block hash verified: ${blockHash}`);
+    } catch (error) {
+      console.error('Block verification error:', error);
+      return new Response(
+        JSON.stringify({ error: `Failed to verify block: ${error.message}` }),
         { status: 500, headers: { ...responseCorsHeaders, 'Content-Type': 'application/json' } }
       );
     }
@@ -116,7 +185,7 @@ serve(async (req) => {
     );
 
     // Update draw with results
-    const { error: updateError } = await supabase
+    const { data: updated, error: updateError } = await supabase
       .from('draws')
       .update({
         block_hash: blockHash,
@@ -126,13 +195,22 @@ serve(async (req) => {
         revealed_at: new Date().toISOString()
       })
       .eq('id', drawId)
-      .eq('status', 'waiting');
+      .eq('status', 'waiting')
+      .select();
 
     if (updateError) {
       console.error('Update error:', updateError);
       return new Response(
         JSON.stringify({ error: 'Failed to reveal draw' }),
         { status: 500, headers: { ...responseCorsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    if (!updated || updated.length === 0) {
+      console.error('Draw already revealed or status changed');
+      return new Response(
+        JSON.stringify({ error: 'Draw already revealed or concurrent update detected' }),
+        { status: 409, headers: { ...responseCorsHeaders, 'Content-Type': 'application/json' } }
       );
     }
 
@@ -162,7 +240,7 @@ serve(async (req) => {
   }
 });
 
-async function keccak256(data: string): Promise<string> {
+async function hashKeccak256(data: string): Promise<string> {
   const encoder = new TextEncoder();
   const dataBytes = encoder.encode(data);
   const hashBytes = keccak_256(dataBytes);

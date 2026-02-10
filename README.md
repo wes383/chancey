@@ -10,7 +10,7 @@ Chancey is a web application that generates verifiable random numbers using Ethe
 
 1. **Commit Phase** - User inputs seed and range, system generates hash commitment of server salt
 2. **Wait for Block** - Wait for specified future block to be mined
-3. **Reveal Phase** - Calculate random number using block hash, user seed, and server salt
+3. **Reveal Phase** - Server verifies block hash from blockchain, then calculates random number using verified block hash, user seed, and server salt
 4. **Share & Verify** - Share results via URL for verification
 
 ## Random Number Generation Algorithm
@@ -43,7 +43,7 @@ Uses [rejection sampling](https://en.wikipedia.org/wiki/Rejection_sampling) to e
 
 - Miners could theoretically choose not to mine a specific block
 - Depends on RPC node availability and accuracy
-- Session token is stored in sessionStorage and will be cleared when the browser is closed, after which the draw cannot be cancelled.
+- Session token is stored in sessionStorage and will be cleared when the browser is closed, after which the draw cannot be cancelled
 
 ## License
 
