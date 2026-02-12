@@ -19,7 +19,7 @@ Uses [rejection sampling](https://en.wikipedia.org/wiki/Rejection_sampling) to e
 
 ```
 1. Calculate limit = 2^256 - (2^256 % range)
-2. Generate hash using Solidity ABI packed encoding:
+2. Generate hash using [Solidity ABI packed encoding](https://docs.soliditylang.org/en/latest/abi-spec.html#non-standard-packed-mode):
    solidityPackedKeccak256(
      types: [bytes32, string, bytes32, string, uint256, uint256],
      values: [blockHash, userSeed, serverSalt, fixedRule, index, attempt]
