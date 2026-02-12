@@ -17,19 +17,16 @@ Chancey is a web application that generates verifiable random numbers using Ethe
 
 Uses [rejection sampling](https://en.wikipedia.org/wiki/Rejection_sampling) to eliminate modulo bias:
 
-```
-1. Calculate limit = 2^256 - (2^256 % range)
+1. Calculate limit: $\text{limit} = 2^{256} - (2^{256} \bmod \text{range})$
 2. Generate hash using [Solidity ABI packed encoding](https://docs.soliditylang.org/en/latest/abi-spec.html#non-standard-packed-mode):
-   solidityPackedKeccak256(
-     types: [bytes32, string, bytes32, string, uint256, uint256],
-     values: [blockHash, userSeed, serverSalt, fixedRule, index, attempt]
-   )
-3. If hash < limit:
-     a. Calculate candidate = (hash % range) + min
-     b. If "No Duplicates" mode: check if candidate was already used
-     c. If unique (or duplicates allowed): accept and return candidate
+   - `solidityPackedKeccak256(types, values)`
+   - types: `[bytes32, string, bytes32, string, uint256, uint256]`
+   - values: `[blockHash, userSeed, serverSalt, fixedRule, index, attempt]`
+3. If $\text{hash} < \text{limit}$:
+   - a. Calculate candidate: $\text{candidate} = (\text{hash} \bmod \text{range}) + \text{min}$
+   - b. If "No Duplicates" mode: check if candidate was already used
+   - c. If unique (or duplicates allowed): accept and return candidate
 4. Otherwise: increment attempt and retry (step 2)
-```
 
 **Parameter Types**:
 - `blockHash`: bytes32 - Target block hash
