@@ -1,6 +1,7 @@
 const allowedOrigins = [
   'http://localhost:3000',
-  'https://chancey.vercel.app'
+  'https://chancey.vercel.app',
+  'https://chancey.wesluma.com'
 ];
 
 export function getCorsHeaders(origin: string | null) {
