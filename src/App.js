@@ -1207,11 +1207,11 @@ function App() {
                         type="number"
                         value={blockOffset}
                         onChange={(e) => {
-                          const sanitized = sanitizeNumber(e.target.value, { min: 2, max: 1000, allowNegative: false });
+                          const sanitized = sanitizeNumber(e.target.value, { min: 3, max: 1000, allowNegative: false });
                           setBlockOffset(sanitized);
                           setError(null);
                         }}
-                        min="2"
+                        min="3"
                         max="1000"
                       />
                       <small style={{ color: '#666', fontSize: '0.8rem', display: 'block', marginTop: '12px', userSelect: 'none' }}>
