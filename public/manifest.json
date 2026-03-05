@@ -1,9 +1,12 @@
 {
   "short_name": "Chancey",
-  "name": "Chancey - Ethereum Random Number Generator",
-  "icons": [],
+  "name": "Chancey - Verifiable Random Number Generator",
+  "description": "Generate cryptographically secure, verifiable random numbers using Ethereum blockchain data. Perfect for giveaways, lotteries, and fair draws with blockchain transparency.",
   "start_url": ".",
   "display": "standalone",
   "theme_color": "#f5f7fa",
-  "background_color": "#f5f7fa"
+  "background_color": "#f5f7fa",
+  "orientation": "portrait-primary",
+  "scope": "/",
+  "categories": ["utilities", "productivity", "finance"]
 }
