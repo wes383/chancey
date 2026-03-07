@@ -1,5 +1,6 @@
 # 🎲 Chancey
 
+[chancey.wesluma.com](https://chancey.wesluma.com/)
 A verifiable random number generator powered by Ethereum blockchain with shareable results
 
 ## Overview
