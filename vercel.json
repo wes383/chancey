@@ -1,4 +1,17 @@
 {
+  "redirects": [
+    {
+      "source": "/(.*)",
+      "destination": "https://chancey.wesluma.com/$1",
+      "permanent": true,
+      "has": [
+        {
+          "type": "host",
+          "value": "chancey.vercel.app"
+        }
+      ]
+    }
+  ],
   "rewrites": [
     {
       "source": "/(.*)",
